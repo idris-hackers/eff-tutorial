@@ -1,0 +1,305 @@
+\section{Simple Effects}
+
+So far we have seen how to write programs with locally mutable state using the
+\texttt{STATE} effect. To recap, we have the definitions in
+Listing \ref{eff:state} in a module \texttt{Effect.State}.
+
+\begin{code}[float=h,frame=single,caption={State Effect},label=eff:state]
+module Effect.State
+
+STATE : Type -> EFFECT
+
+get    :             { [STATE x] } Eff m x
+put    : x ->        { [STATE x] } Eff m () 
+putM   : y ->        { [STATE x] ==> [STATE y] } Eff m () 
+update : (x -> x) -> { [STATE x] } Eff m () 
+
+instance Handler State m
+\end{code}
+
+\noindent
+The last line, \texttt{instance Handler State m}, means that the \texttt{STATE}
+effect is usable in any computation context \texttt{m}. (The lower case
+\texttt{State} is a data type describing the operations which make up the
+\texttt{STATE} effect itself---we will go into more
+detail about this in Section \ref{sect:impleff}.) 
+
+In this section, we will introduce some other supported effects, allowing
+console I/O, exceptions, random number generation and non-deterministic
+programming.
+For each effect we introduce, we will begin with a summary of the effect,
+its supported operations, and the contexts in which it may be used,
+like that above for \texttt{STATE}, and go on to
+present some simple examples. At the end, we will see some examples of programs
+which combine multiple effects.
+
+\subsection{Console I/O}
+
+\begin{code}[float=h,frame=single, caption={Console I/O Effect}, label=eff:stdio]
+module Effect.StdIO
+
+STDIO : EFFECT
+
+putChar  : Handler StdIO m => Char ->   { [STDIO] } Eff m ()
+putStr   : Handler StdIO m => String -> { [STDIO] } Eff m ()
+putStrLn : Handler StdIO m => String -> { [STDIO] } Eff m ()
+
+getStr   : Handler StdIO m =>           { [STDIO] } Eff m String
+getChar  : Handler StdIO m =>           { [STDIO] } Eff m Char
+
+instance Handler StdIO IO
+instance Handler StdIO (IOExcept a)
+\end{code}
+
+\noindent
+Console I/O (Listing \ref{eff:stdio})
+is supported with the \texttt{STDIO} effect, which allows reading
+and writing characters and strings to and from standard input and standard
+output. Notice that there is a constraint here on the computation context
+\texttt{m}, because it only makes sense to support console I/O operations in
+a context where we can perform (or at the very least simulate) console I/O.
+
+\subsubsection*{Examples}
+
+A program which reads the user's name, then says hello, can be written
+as follows:
+
+\begin{code}
+hello : { [STDIO] } Eff IO ()
+hello = do putStr "Name? "
+           x <- getStr
+           putStrLn ("Hello " ++ trim x ++ "!")
+\end{code}
+
+\noindent
+We use \texttt{trim} here to remove the trailing newline from the input.
+The resource associated with \texttt{STDIO} is simply the empty tuple, which
+has a default value \texttt{()}, so we can run this as follows:
+
+\begin{code}
+main : IO ()
+main = run hello
+\end{code}
+
+\noindent
+In \texttt{hello} we could also use \texttt{!}-notation instead of \texttt{x <-
+getStr}, since we only use the string that is read once:
+
+\begin{code}
+hello : { [STDIO] } Eff IO ()
+hello = do putStr "Name? "
+           putStrLn ("Hello " ++ trim !getStr ++ "!")
+\end{code}
+
+\noindent
+More interestingly, we can combine multiple effects in one program. For example,
+we can loop, counting the number of people we've said hello to:
+
+\begin{code}
+hello : { [STATE Int, STDIO] } Eff IO ()
+hello = do putStr "Name? "
+           putStrLn ("Hello " ++ trim !getStr ++ "!")
+           update (n + 1)
+           putStrLn ("I've said hello to: " ++ show !get ++ " people")
+           hello
+\end{code}
+
+\noindent
+The list of effects given in \texttt{hello} means that the function can
+call \texttt{get} and \texttt{put} on an integer state, and any functions
+which read and write from the console. To run this, \texttt{main} does
+not need to be changed.
+
+\subsubsection*{Aside: Resource Types}
+
+To find out the resource type of an effect, if necessary (for example if
+we want to initialise a resource explicitiy with \texttt{runInit} rather than
+using a default value with \texttt{run})
+we can run the \texttt{resourceType} function at the \Idris{} REPL:
+
+\begin{code}
+*ConsoleIO> resourceType STDIO
+() : Type
+*ConsoleIO> resourceType (STATE Int)
+Int : Type
+\end{code}
+
+\subsection{Exceptions}
+
+Listing \ref{eff:exception} gives the definition of the \texttt{EXCEPTION}
+effect, declared in module \texttt{Effect.Exception}. This allows programs
+to exit immediately with an error, or errors to be handled more generally.
+
+\begin{code}[float=h,frame=single,label=eff:exception,caption={Exception Effect}]
+module Effect.Exception
+
+EXCEPTION : Type -> EFFECT
+
+raise : a -> { [EXCEPTION a ] } Eff m b 
+
+instance           Handler (Exception a) Maybe
+instance           Handler (Exception a) List
+instance           Handler (Exception a) (Either a)
+instance           Handler (Exception a) (IOExcept a)
+instance Show a => Handler (Exception a) IO
+\end{code}
+
+\subsubsection*{Example}
+
+\begin{code}
+data Err = NotANumber | OutOfRange
+
+parseNumber : Int -> String -> { [EXCEPTION Err] } Eff m Int
+parseNumber num str
+   = if all isDigit (unpack str)
+        then let x = cast str in
+             if (x >=0 && x <= num)
+                then pure x
+                else raise OutOfRange
+        else raise NotANumber
+\end{code}
+
+\begin{code}
+*Exception> the (Either Err Int) $ run (parseNumber 42 "20")
+Right 20 : Either Err Int
+\end{code}
+
+\begin{code}
+*Exception> the (Either Err Int) $ run (parseNumber 42 "50")
+Left OutOfRange : Either Err Int
+\end{code}
+
+\begin{code}
+*Exception> the (Either Err Int) $ run (parseNumber 42 "twenty")
+Left NotANumber : Either Err Int
+\end{code}
+
+\begin{code}
+catch : Catchable m err => 
+        { xs } Eff m a -> (err -> { xs } Eff m a) -> { xs } Eff m a
+\end{code}
+
+\begin{code}
+instance Catchable Maybe () 
+instance Catchable (Either a) a 
+instance Catchable (IOExcept err) err 
+instance Catchable List () 
+\end{code}
+
+\begin{code}
+readNum : Int -> { [STDIO, EXCEPTION Err] } Eff (IOExcept Err) ()
+readNum r = do
+    putStr $ "Enter a number between 0 and " ++ show r ++ ":"
+    num <- catch (parseNumber r (trim !getStr))
+                 (\e => do putStrLn $ "FAIL: " ++ show e
+                           return 0)
+    putStrLn $ show num
+\end{code}
+
+\subsection{Random Numbers}
+
+\begin{code}[float=h,frame=single,label=eff:random,caption={Random Number Effect}]
+module Effect.Random
+
+RND : EFFECT
+
+srand  : Integer ->            { [RND] } Eff m ()
+rndInt : Integer -> Integer -> { [RND] } Eff m Integer
+rndFin : (k : Nat) ->          { [RND] } Eff m (Fin (S k))
+
+instance Handler Random m
+\end{code}
+
+\subsubsection*{Example}
+
+\begin{code}
+guess : Int -> { [STDIO] } Eff IO ()
+\end{code}
+
+\begin{code}
+game : { [RND, STDIO] } Eff IO ()
+game = do srand 123456789
+          guess (fromInteger !(rndInt 0 100))
+
+main : IO ()
+main = run game
+\end{code}
+
+\noindent
+For reference, the code for \texttt{guess} is given in Listing \ref{eff:game}.
+Note that we use \texttt{parseNumber} as defined previously 
+to read user input, but we don't need to list the \texttt{EXCEPTION} effect
+because we use a nested \texttt{run} to invoke \texttt{parseNumber},
+independently of the calling effectful program.
+
+\begin{code}[frame=single,float,label=eff:game,caption={Guessing Game}]
+guess : Int -> { [STDIO] } Eff IO ()
+guess target
+  = do putStr "Guess: "
+       case run (parseNumber 100 (trim !getStr)) of
+            Nothing => do putStrLn "Invalid input"
+                          guess target
+            Just v => case compare v target of
+                           LT => do putStrLn "Too low"
+                                    guess target
+                           EQ => putStrLn "You win!"
+                           GT => do putStrLn "Too high"
+                                    guess target
+\end{code}
+
+\subsection{Non-determinism}
+
+\begin{code}[float=h,frame=single,label=eff:select,caption={Non-determinism Effect}]
+SELECT : EFFECT
+
+select : List a -> { [SELECT] } Eff m a 
+
+instance Handler Selection Maybe
+instance Handler Selection List
+\end{code}
+
+\subsubsection*{Example}
+
+\begin{code}
+triple : Int -> { [SELECT, EXCEPTION String] } Eff m (Int, Int, Int)
+triple max = do z <- select [1..max]
+                y <- select [1..z]
+                x <- select [1..y]
+                if (x * x + y * y == z * z)
+                   then pure (x, y, z)
+                   else raise "No triple"
+\end{code}
+
+\begin{code}
+main : IO ()
+main = do print $ the (Maybe _) $ run (triple 100)
+          print $ the (List _) $ run (triple 100)
+\end{code}
+
+\subsection{\texttt{vadd} revisited}
+
+\begin{code}
+vadd_check : Vect n Int -> Vect m Int ->
+             { [EXCEPTION String] } Eff e (Vect m Int)
+vadd_check {n} {m} xs ys with (decEq n m)
+  vadd_check {n} {m=n} xs ys | (Yes refl) = pure (vadd xs ys)
+  vadd_check {n} {m}   xs ys | (No contra) = raise "Length mismatch"
+\end{code}
+
+\begin{code}
+read_vec : { [STDIO] } Eff IO (p ** Vect p Int)
+read_vec = ...
+\end{code}
+
+\begin{code}
+do_vadd : { [STDIO, EXCEPTION String] } Eff IO ()
+do_vadd = do putStrLn "Vector 1"
+             (_ ** xs) <- read_vec
+             putStrLn "Vector 2"
+             (_ ** ys) <- read_vec
+             putStrLn (show !(vadd_check xs ys))
+\end{code}
+
+\subsection{Example: An Expression Calculator}
+
+\subsection{Introducing effects with \texttt{new}}

@@ -1,0 +1,57 @@
+\documentclass[british, final
+              ]{article}
+
+\usepackage[l2tabu,orthodox]{nag}
+\usepackage{fixltx2e}
+\usepackage{babel}
+\usepackage[iso]{isodate}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[protrusion=true, expansion=true]{microtype}
+\usepackage[strict=true]{csquotes}
+\usepackage{xspace}
+
+\usepackage{mathpazo}
+\usepackage[scaled=0.95]{helvet}
+\usepackage{courier}
+
+\usepackage{fullpage}
+\usepackage{hyperref}
+\usepackage[missing=0.9.12]{gitinfo}
+
+\usepackage{multicol}
+\usepackage{enumitem}
+
+\usepackage{fpmacros}
+\usepackage{idrislang}
+\usepackage{comment}
+\usepackage{graphicx}
+
+\input{conf.ltx}
+\input{library.ltx}
+
+\newcommand{\version}{\gitVtagn}
+\newcommand{\effects}{\texttt{neweffects}}
+
+\title{Programming and Reasoning with Side-Effects in \Idris{}}
+\author{Edwin Brady}
+\date{\origdate\today}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+\input{./content/intro.tex}
+\input{./content/state.tex}
+\input{./content/simpleeff.tex}
+\input{./content/depeff.tex}
+\input{./content/impleff.tex}
+\input{./content/conclusions.tex}
+
+%\newpage
+\bibliographystyle{abbrv}
+\bibliography{literature}
+
+\end{document}
