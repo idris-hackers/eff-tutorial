@@ -361,7 +361,13 @@ guess target
 
 \subsection{Non-determinism}
 
+Listing \ref{eff:select} gives the definition of the non-determinism effect,
+which allows a program to choose a value non-deterministically from a list
+of possibilities in such a way that the entire computation succeeds.
+
 \begin{code}[float=h,frame=single,label=eff:select,caption={Non-determinism Effect}]
+import Effect.Selection
+
 SELECT : EFFECT
 
 select : List a -> { [SELECT] } Eff m a 
@@ -371,6 +377,11 @@ instance Handler Selection List
 \end{code}
 
 \subsubsection*{Example}
+
+The \texttt{SELECT} effect can be used to solve constraint problems, such as
+finding Pythagorean triples. The idea is to use \texttt{select} to give a
+set of candidate values, then throw an exception for any combination of values
+which does not satisfy the constraint:
 
 \begin{code}
 triple : Int -> { [SELECT, EXCEPTION String] } Eff m (Int, Int, Int)
@@ -382,6 +393,19 @@ triple max = do z <- select [1..max]
                    else raise "No triple"
 \end{code}
 
+\noindent
+This program chooses a value for \texttt{z} between \texttt{1} and \texttt{max},
+then values for \texttt{y} and \texttt{x}. In operation, after a
+\texttt{select}, the program executes the rest of the \texttt{do}-block for
+every possible assignment, effectively searching depth-first. If the list
+is empty (or an exception is thrown) execution fails.
+
+There are handlers defined for \texttt{Maybe} and \texttt{List} contexts,
+i.e. contexts which can capture failure.
+Depending on the context \texttt{m}, \texttt{triple} will either return the
+first triple it finds (if in \texttt{Maybe} context) or all triples in the
+range (if in \texttt{List} context). We can try this as follows:
+
 \begin{code}
 main : IO ()
 main = do print $ the (Maybe _) $ run (triple 100)
@@ -389,6 +413,25 @@ main = do print $ the (Maybe _) $ run (triple 100)
 \end{code}
 
 \subsection{\texttt{vadd} revisited}
+
+We now return to the \texttt{vadd} program from the introduction. Recall the
+definition:
+
+\begin{code}
+vadd : Vect n Int -> Vect n Int -> Vect n Int
+vadd []        []        = []
+vadd (x :: xs) (y :: ys) = x + y :: vadd xs ys
+\end{code}
+
+\noindent
+Using \effects{}, we can set up a program so that it reads input from a user,
+checks that the input is valid (i.e both vectors contain integers, and are
+the same length) and if so, pass it on to \texttt{vadd}. First, we write
+a wrapper for \texttt{vadd} which checks the lengths and throw an exception
+if they are not equal. We can do this for input vectors of length \texttt{n}
+and \texttt{m} by matching on the implicit arguments \texttt{n} and
+\texttt{m} and using \texttt{decEq} to produce a proof of their equality,
+if they are equal:
 
 \begin{code}
 vadd_check : Vect n Int -> Vect m Int ->
@@ -398,10 +441,24 @@ vadd_check {n} {m} xs ys with (decEq n m)
   vadd_check {n} {m}   xs ys | (No contra) = raise "Length mismatch"
 \end{code}
 
+\noindent
+To read a vector from the console, we implement a function of the following
+type:
+
 \begin{code}
 read_vec : { [STDIO] } Eff IO (p ** Vect p Int)
-read_vec = ...
 \end{code}
+
+\noindent
+This returns a dependent pair of a length, and a vector of that length, because
+we cannot know in advance how many integers the user is going to input.
+One way to implement this function, using \texttt{-1} to indicate the end
+of input, is shown in Listing \ref{readvec}. This uses a variation on
+\texttt{parseNumber} which does not require a number to be within range.
+
+Finally, we write a program which reads two vectors and prints the result
+of pairwise addition of them, throwing an exception if the inputs are of
+differing lengths:
 
 \begin{code}
 do_vadd : { [STDIO, EXCEPTION String] } Eff IO ()
@@ -410,6 +467,30 @@ do_vadd = do putStrLn "Vector 1"
              putStrLn "Vector 2"
              (_ ** ys) <- read_vec
              putStrLn (show !(vadd_check xs ys))
+\end{code}
+
+\noindent
+By having explicit lengths in the type, we can be sure that \texttt{vadd} is
+only being used where the lengths of inputs are guaranteed to be equal. This
+does not stop us reading vectors from user input, but it does require that
+the lengths are checked and any discrepancy is dealt with gracefully.
+
+\begin{code}[float=h,frame=single,caption={Reading a vector from the console},label=readvec]
+read_vec : { [STDIO] } Eff IO (p ** Vect p Int)
+read_vec = do putStr "Number (-1 when done): "
+              case run (parseNumber (trim !getStr)) of
+                   Nothing => do putStrLn "Input error"
+                                 read_vec
+                   Just v => if (v /= -1)
+                                then do (_ ** xs) <- read_vec
+                                        pure (_ ** v :: xs)
+                                else pure (_ ** [])
+  where
+    parseNumber : String -> { [EXCEPTION String] } Eff m Int
+    parseNumber str
+      = if all (\x => isDigit x || x == '-') (unpack str)
+           then pure (cast str)
+           else raise "Not a number"
 \end{code}
 
 \subsection{Example: An Expression Calculator}

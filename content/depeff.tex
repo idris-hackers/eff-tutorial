@@ -2,3 +2,29 @@
 
 Updating \texttt{STATE}, example with interpreter.
 \texttt{FILE\_IO}, example.
+
+\subsection{File management}
+
+\begin{code}[float=h,frame=single, caption={File I/O Effect}, label=eff:fileio]
+module Effect.File
+
+FILE_IO : Type -> EFFECT
+
+data OpenFile : Mode -> Type
+
+open  : Handler FileIO e => String -> (m : Mode) -> 
+        { [FILE_IO ()] ==> 
+          {ok} [FILE_IO (if ok then OpenFile m else ())] } Eff e Bool
+close : Handler FileIO e =>
+        { [FILE_IO (OpenFile m)] ==> [FILE_IO ()] } Eff e ()
+
+readLine  : Handler FileIO e => 
+           { [FILE_IO (OpenFile Read)] } Eff e String 
+writeLine : Handler FileIO e => String -> 
+           { [FILE_IO (OpenFile Write)] } Eff e ()
+eof       : Handler FileIO e => 
+           { [FILE_IO (OpenFile Read)] } Eff e Bool 
+
+instance Handler FileIO IO
+\end{code}
+

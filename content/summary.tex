@@ -1,5 +1,125 @@
 \section{Effects Summary}
 
 \label{sect:appendix}
+This appendix gives interfaces for the core effects provided by the \effects{}
+library.
 
-Repeat summary APIs of all the effects in the library.
+\subsection{EXCEPTION}
+
+\begin{code}
+module Effect.Exception
+
+EXCEPTION : Type -> EFFECT
+
+raise : a -> { [EXCEPTION a ] } Eff m b 
+
+instance           Handler (Exception a) Maybe
+instance           Handler (Exception a) List
+instance           Handler (Exception a) (Either a)
+instance           Handler (Exception a) (IOExcept a)
+instance Show a => Handler (Exception a) IO
+\end{code}
+
+\subsection{FILE\_IO}
+
+\begin{code}
+module Effect.File
+
+FILE_IO : Type -> EFFECT
+
+data OpenFile : Mode -> Type
+
+open  : Handler FileIO e => String -> (m : Mode) -> 
+        { [FILE_IO ()] ==> 
+          {ok} [FILE_IO (if ok then OpenFile m else ())] } Eff e Bool
+close : Handler FileIO e =>
+        { [FILE_IO (OpenFile m)] ==> [FILE_IO ()] } Eff e ()
+
+readLine  : Handler FileIO e => 
+           { [FILE_IO (OpenFile Read)] } Eff e String 
+writeLine : Handler FileIO e => String -> 
+           { [FILE_IO (OpenFile Write)] } Eff e ()
+eof       : Handler FileIO e => 
+           { [FILE_IO (OpenFile Read)] } Eff e Bool 
+
+instance Handler FileIO IO
+\end{code}
+
+\subsection{RND}
+
+\begin{code}
+module Effect.Random
+
+RND : EFFECT
+
+srand  : Integer ->            { [RND] } Eff m ()
+rndInt : Integer -> Integer -> { [RND] } Eff m Integer
+rndFin : (k : Nat) ->          { [RND] } Eff m (Fin (S k))
+
+instance Handler Random m
+\end{code}
+
+\subsection{SELECT}
+
+\begin{code}
+import Effect.Selection
+
+SELECT : EFFECT
+
+select : List a -> { [SELECT] } Eff m a 
+
+instance Handler Selection Maybe
+instance Handler Selection List
+\end{code}
+
+
+\subsection{STATE}
+
+\begin{code}
+module Effect.State
+
+STATE : Type -> EFFECT
+
+get    :             { [STATE x] } Eff m x
+put    : x ->        { [STATE x] } Eff m () 
+putM   : y ->        { [STATE x] ==> [STATE y] } Eff m () 
+update : (x -> x) -> { [STATE x] } Eff m () 
+
+instance Handler State m
+\end{code}
+
+\subsection{STDIO}
+
+\begin{code}
+module Effect.StdIO
+
+STDIO : EFFECT
+
+putChar  : Handler StdIO m => Char ->   { [STDIO] } Eff m ()
+putStr   : Handler StdIO m => String -> { [STDIO] } Eff m ()
+putStrLn : Handler StdIO m => String -> { [STDIO] } Eff m ()
+
+getStr   : Handler StdIO m =>           { [STDIO] } Eff m String
+getChar  : Handler StdIO m =>           { [STDIO] } Eff m Char
+
+instance Handler StdIO IO
+instance Handler StdIO (IOExcept a)
+\end{code}
+
+\subsection{SYSTEM}
+
+\begin{code}
+module Effect.System
+
+SYSTEM : EFFECT
+
+getArgs : Handler System e =>           { [SYSTEM] } Eff e (List String)
+time    : Handler System e =>           { [SYSTEM] } Eff e Int
+getEnv  : Handler System e => String -> { [SYSTEM] } Eff e (Maybe String)
+
+instance Handler System IO
+instance Handler System (IOExcept a)
+\end{code}
+
+
+
