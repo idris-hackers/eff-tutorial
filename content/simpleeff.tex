@@ -33,6 +33,9 @@ like that above for \texttt{STATE}, and go on to
 present some simple examples. At the end, we will see some examples of programs
 which combine multiple effects.
 
+All of the effects in the library, including those described in this section,
+are summarised in Appendix \ref{sect:appendix}.
+
 \subsection{Console I/O}
 
 \begin{code}[float=h,frame=single, caption={Console I/O Effect}, label=eff:stdio]
@@ -275,6 +278,10 @@ readNum = do
 
 \subsection{Random Numbers}
 
+Random number generation is also implemented by the \effects{} library,
+in module \texttt{Effect.Random}. Listing \ref{eff:random} gives its
+definition.
+
 \begin{code}[float=h,frame=single,label=eff:random,caption={Random Number Effect}]
 module Effect.Random
 
@@ -287,11 +294,39 @@ rndFin : (k : Nat) ->          { [RND] } Eff m (Fin (S k))
 instance Handler Random m
 \end{code}
 
+Random number generation is considered side-effecting because its implementation
+generally relies on some external source of randomness. The default 
+implementation here relies on an integer \emph{seed}, which can be set with
+\texttt{srand}. A specific seed will lead to a predictable, repeatable
+sequence of random numbers. There are two functiosn which produce a random
+number:
+
+\begin{itemize}
+\item \texttt{rndInt}, which returns a random integer between the given lower and upper bounds.
+\item \texttt{rndFin}, which returns a random element of a finite set (essentially
+a number with an upper bound given in its type).
+\end{itemize}
+
 \subsubsection*{Example}
+
+We can use the \texttt{RND} effect to implement a simple guessing game.
+The \texttt{guess} function, given a target number, will repeatedly ask the
+user for a guess, and state whether the guess is too high, too low, or
+correct:
 
 \begin{code}
 guess : Int -> { [STDIO] } Eff IO ()
 \end{code}
+
+\noindent
+For reference, the code for \texttt{guess} is given in Listing \ref{eff:game}.
+Note that we use \texttt{parseNumber} as defined previously 
+to read user input, but we don't need to list the \texttt{EXCEPTION} effect
+because we use a nested \texttt{run} to invoke \texttt{parseNumber},
+independently of the calling effectful program.
+
+To invoke these, we pick a random number within the range 0--100, having
+set up the random number generator with a seed, then run \texttt{guess}:
 
 \begin{code}
 game : { [RND, STDIO] } Eff IO ()
@@ -303,25 +338,25 @@ main = run game
 \end{code}
 
 \noindent
-For reference, the code for \texttt{guess} is given in Listing \ref{eff:game}.
-Note that we use \texttt{parseNumber} as defined previously 
-to read user input, but we don't need to list the \texttt{EXCEPTION} effect
-because we use a nested \texttt{run} to invoke \texttt{parseNumber},
-independently of the calling effectful program.
+If no seed is given, it is set to the \texttt{default} value. For a less
+predictable game, some better source of randomness would be required, for
+example taking an initial seed from the system time. To see how to do
+this, see the \texttt{SYSTEM} effect described in Appendix \ref{sect:appendix}.
 
 \begin{code}[frame=single,float,label=eff:game,caption={Guessing Game}]
 guess : Int -> { [STDIO] } Eff IO ()
 guess target
-  = do putStr "Guess: "
-       case run (parseNumber 100 (trim !getStr)) of
-            Nothing => do putStrLn "Invalid input"
-                          guess target
-            Just v => case compare v target of
-                           LT => do putStrLn "Too low"
-                                    guess target
-                           EQ => putStrLn "You win!"
-                           GT => do putStrLn "Too high"
-                                    guess target
+    = do putStr "Guess: "
+         case run (parseNumber 100 (trim !getStr)) of
+              Nothing => do putStrLn "Invalid input"
+                            guess target
+              Just (v ** _) =>
+                         case compare v target of
+                             LT => do putStrLn "Too low"
+                                      guess target
+                             EQ => putStrLn "You win!"
+                             GT => do putStrLn "Too high"
+                                      guess target
 \end{code}
 
 \subsection{Non-determinism}
