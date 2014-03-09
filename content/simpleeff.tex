@@ -146,6 +146,12 @@ instance Show a => Handler (Exception a) IO
 
 \subsubsection*{Example}
 
+Suppose we have a \texttt{String} which is expected to represent an integer in
+the range \texttt{0} to \texttt{n}. We can write a function \texttt{parseNumber}
+which returns an \texttt{Int} if parsing the string returns a number in the
+appropriate range, or throws an exception otherwise. Exceptions are
+paramaterised by an error type:
+
 \begin{code}
 data Err = NotANumber | OutOfRange
 
@@ -159,42 +165,113 @@ parseNumber num str
         else raise NotANumber
 \end{code}
 
+\noindent
+Programs which support the \texttt{EXCEPTION} effect can be run in any
+context which has some way of throwing errors, for example, we can run
+\texttt{parseNumber} in the \texttt{Either Err} context. It returns
+a value of the form \texttt{Right x} if successful:
+
 \begin{code}
 *Exception> the (Either Err Int) $ run (parseNumber 42 "20")
 Right 20 : Either Err Int
 \end{code}
 
+\noindent
+Or \texttt{Left e} on failure, carrying the appropriate exception:
+
 \begin{code}
 *Exception> the (Either Err Int) $ run (parseNumber 42 "50")
 Left OutOfRange : Either Err Int
-\end{code}
 
-\begin{code}
 *Exception> the (Either Err Int) $ run (parseNumber 42 "twenty")
 Left NotANumber : Either Err Int
 \end{code}
+
+\noindent
+In fact, we can do a little bit better with \texttt{parseNumber}, and have it
+return a \emph{proof} that the integer is in the required range along with
+the integer itself. One way to do this is define a type of bounded integers,
+\texttt{Bounded}:
+
+\begin{code}
+Bounded : Int -> Type
+Bounded x = (n : Int ** so (n >= 0 && n <= x))
+\end{code}
+
+\noindent
+Recall that \texttt{so} is parameterised by a \texttt{Bool}, and only
+\texttt{so True} is inhabited. We can use \texttt{choose} to construct such
+a value from the result of a dynamic check:
+
+\begin{code}
+data so : Bool -> Type = oh : so True
+
+choose : (b : Bool) -> Either (so b) (so (not b))
+\end{code}
+
+\noindent
+We then write \texttt{parseNumber} using \texttt{choose} rather than
+an \texttt{if/then/else} construct, passing the proof it returns on success
+as the boundedness proof:
+
+\begin{code}
+parseNumber : (x : Int) -> String -> { [EXCEPTION Err] } Eff m (Bounded x)
+parseNumber x str
+   = if all isDigit (unpack str)
+        then let num = cast str in
+             case choose (num >=0 && num <= x) of
+                  Left p => pure (num ** p)
+                  Right p => raise OutOfRange
+        else raise NotANumber
+\end{code}
+
+\noindent
+If we are going to use this in a larger program, it is likely that we will also
+want to recover from parse failures. The \effects{} library provides the
+\texttt{catch} function for this, taking a program with available effects
+\texttt{xs}, and a function for dealing with any exceptions:
 
 \begin{code}
 catch : Catchable m err => 
         { xs } Eff m a -> (err -> { xs } Eff m a) -> { xs } Eff m a
 \end{code}
 
+\noindent
+Notice the constraint \texttt{Catchable m err}. It is not required that
+the set of available effects includes \texttt{EXCEPTION}, merely that the
+context supports throwing and catching off errors \emph{independently} of
+whether a program uses \effects{}. It is defined as follows:
+
 \begin{code}
+class Catchable (m : Type -> Type) t where
+    throw : t -> m a
+    catch : m a -> (t -> m a) -> m a
+
 instance Catchable Maybe () 
 instance Catchable (Either a) a 
 instance Catchable (IOExcept err) err 
 instance Catchable List () 
 \end{code}
 
+\noindent
+Using \texttt{catch}, we can write a program which takes user input, parses
+it to check it is a number within a defined range, and uses a default value
+if there is a parse error.
+%
+Notice that after reading user input, the resulting proof \texttt{prf} is
+available as a guarantee that the number which has been read from user input
+is in the range \texttt{0--100}.
+
 \begin{code}
-readNum : Int -> { [STDIO, EXCEPTION Err] } Eff (IOExcept Err) ()
-readNum r = do
-    putStr $ "Enter a number between 0 and " ++ show r ++ ":"
-    num <- catch (parseNumber r (trim !getStr))
-                 (\e => do putStrLn $ "FAIL: " ++ show e
-                           return 0)
+readNum : { [STDIO, EXCEPTION Err] } Eff (IOExcept Err) ()
+readNum = do
+    putStr $ "Enter a number between 0 and 100:"
+    (num ** prf) <- catch (parseNumber 100 (trim !getStr))
+                          (\e => do putStrLn $ "FAIL: " ++ show e
+                                    return (0 ** oh))
     putStrLn $ show num
 \end{code}
+
 
 \subsection{Random Numbers}
 
