@@ -495,4 +495,148 @@ read_vec = do putStr "Number (-1 when done): "
 
 \subsection{Example: An Expression Calculator}
 
+To show how these effects can fit together, let us consider an evaluator for
+a simple expression language, with addition and integer values.
+
+\begin{code}
+data Expr = Val Integer
+          | Add Expr Expr
+\end{code}
+
+\noindent
+An evaluator for this language always returns an \texttt{Integer}, and there
+are no situations in which it can fail!
+
+\begin{code}
+eval : Expr -> Integer
+eval (Val x) = x
+eval (Add l r) = eval l + eval r
+\end{code}
+
+\noindent
+If we add variables, however, things get more interesting. The evaluator will
+need to be able to access the values stored in variables, and variables may
+be undefined.
+
+\begin{code}
+data Expr = Val Integer
+          | Var Expr
+          | Add Expr Expr
+\end{code}
+
+\noindent
+To start, we will change the type of \texttt{eval} so that it is effectful,
+and supports an exception effect for throwing errors, and a state containing
+a mapping from variable names (as \texttt{String}s) to their values:
+
+\begin{code}
+Env : Type
+Env = List (String, Integer)
+
+eval : Expr -> { [EXCEPTION String, STATE Env] } Eff m Integer
+eval (Val x) = return x
+eval (Add l r) = return $ !(eval l) + !(eval r)
+\end{code}
+
+\noindent
+Note that we are using \texttt{!}-notation to avoid having to bind
+subexpressions in a \texttt{do} block.
+Next, we add a case for evaluating \texttt{Var}:
+
+\begin{code}
+eval (Var x) = case lookup x !get of
+                    Nothing => raise $ "No such variable " ++ x
+                    Just val => return val
+\end{code}
+
+\noindent
+This retrieves the state (with \texttt{get}, supported by the \texttt{STATE Env}
+effect) and raises an exception if the variable is not in the environment
+(with \texttt{raise}, supported by the \texttt{EXCEPTION String} effect).
+
+To run the evaluator on a particular expression in a particular environment
+of names and their values, we can write a function which sets the state then
+invokes \texttt{eval}:
+
+\begin{code}
+runEval : List (String, Integer) -> Expr -> Maybe Integer
+runEval args expr = run (eval' expr)
+  where eval' : Expr -> { [EXCEPTION String, STATE Env] } Eff Maybe Integer
+        eval' e = do put args
+                     eval e
+\end{code}
+
+We have picked \texttt{Maybe} as a computation context here; it needs to
+be a context which is available for every effect supported by \texttt{eval}.
+In particular, because we have exceptions, it needs to be a context which
+supports exceptions. Alternatively, \texttt{Either String} or \texttt{IO}
+would be fine, for example.
+
+What if we want to extend the evaluator further, with random number generation?
+To achieve this, we add a new constructor to \texttt{Expr}, which gives
+a random number up to a maximum value:
+
+\begin{code}
+data Expr = Val Integer
+          | Var Expr
+          | Add Expr Expr
+          | Random Integer
+\end{code}
+
+\noindent
+Then, we need to deal with the new case, making sure that we extend the
+list of events to include \texttt{RND}. It doen't matter where \texttt{RND}
+appears in the list, as long as it is present:
+
+\begin{code}
+eval : Expr -> { [EXCEPTION String, RND, STATE Env] } Eff m Integer
+
+eval (Random upper) = return !(rndInt 0 upper)
+\end{code}
+
+\noindent
+For test purposes, we might also want to print the random number which has
+been generated:
+
+\begin{code}
+eval (Random upper) = do val <- rndInt 0 upper
+                         putStrLn (show val)
+                         return val
+\end{code}
+
+\noindent
+If we try this without extending the effects list, we would see an error
+something like the following:
+
+\begin{code}
+Expr.idr:28:6:When elaborating right hand side of eval:
+Can't solve goal 
+   SubList [STDIO]
+           [(EXCEPTION String), RND, (STATE (List (String, Integer)))]
+\end{code}
+
+\noindent
+In other words, the \texttt{STDIO} effect is not available. We can correct
+this simply by updating the type of \texttt{eval} to include \texttt{STDIO},
+and setting the context \texttt{m} to be one which is handled by \texttt{STDIO}
+such as \texttt{IO}:
+
+\begin{code}
+eval : Expr -> { [STDIO, EXCEPTION String, RND, STATE Env] } Eff IO Integer
+\end{code}
+
+\noindent
+Once effect lists get longer, it can be a good idea instead
+to encapsulate sets of effects in a type synonym. This is achieved as follows,
+simply by defining a function which computes a type, since types are first
+class in \Idris{}:
+
+\begin{code}
+EvalEff : Type -> Type
+EvalEff t = { [STDIO, EXCEPTION String, RND, STATE Env] } Eff IO t
+  
+eval : Expr -> EvalEff Integer
+\end{code}
+
+
 \subsection{Introducing effects with \texttt{new}}
