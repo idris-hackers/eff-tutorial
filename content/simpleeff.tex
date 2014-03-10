@@ -638,5 +638,8 @@ EvalEff t = { [STDIO, EXCEPTION String, RND, STATE Env] } Eff IO t
 eval : Expr -> EvalEff Integer
 \end{code}
 
+%FIXME: Is 'new' really a good idea?
+%\subsection{Introducing effects with \texttt{new}}
 
-\subsection{Introducing effects with \texttt{new}}
+%It can occasionally be useful to introduce new effects during a computation.
+%For example, introducing a new explcit state
