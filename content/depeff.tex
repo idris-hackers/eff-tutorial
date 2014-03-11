@@ -1,9 +1,173 @@
 \section{Dependent Effects}
 
-Updating \texttt{STATE}, example with interpreter.
-\texttt{FILE\_IO}, example.
+In the programs we have seen so far, the available effects have remained
+constant. Sometimes, however, an operation can \emph{change} the available
+effects. The simplest example occurs when we have a state with a dependent
+type---adding an element to a vector also changes its type, for example,
+since its length is explicit in the type. In this section, we will see how
+the \effects{} library supports this. Firstly, we will see how states with
+dependent types can be implemented. Secondly, we will see how the effects
+can depend on the \emph{result} of an effectful operation. Finally, we will
+see how this can be used to implement a type-safe and resource-safe protocol
+for file management.
 
-\subsection{File management}
+\subsection{Dependent States}
+
+Suppose we have a function which reads input from the console, converts it
+to an integer, and adds it to a list which is stored in a \texttt{STATE}.
+It might look something like the following:
+
+\begin{code}
+readInt : { [STATE (List Int), STDIO] } Eff IO ()
+readInt = do let x = trim !getStr
+             put (cast x :: !get)
+\end{code}
+
+\noindent
+But what if, instead of a list of integers, we would like to store a
+\texttt{Vect}, maintaining the length in the type?
+
+\begin{code}
+readInt : { [STATE (Vect n Int), STDIO] } Eff IO ()
+readInt = do let x = trim !getStr
+             put (cast x :: !get)
+\end{code}
+
+\noindent
+This will not type check! Although the vector has length \texttt{n} on
+entry to \texttt{readInt}, it has length \texttt{S n} on exit. The
+\effects{} library allows us to express this as follows:
+
+\begin{code}
+readInt : { [STATE (Vect n Int), STDIO] ==>
+            [STATE (Vect (S n) Int), STDIO] } Eff IO ()
+readInt = do let x = trim !getStr
+             putM (cast x :: !get)
+\end{code}
+
+\noindent
+The notation \texttt{\{ xs ==> xs' \} Eff m a} in a type means that the
+operation begins with effects \texttt{xs} available, and ends with effects
+\texttt{xs'} available. We have used \texttt{putM} to update the state, where
+the \texttt{M} suffix indicates that the \emph{type} is being updated as well
+as the value. It has the following type:
+
+\begin{code}
+putM : y -> { [STATE x] ==> [STATE y] } Eff m () 
+\end{code}
+
+\subsection{Result-dependent Effects}
+
+Often, whether a state is updated could depend on the success or otherwise
+of an operation. In our \texttt{readInt} example, we might wish to update
+the vector only if the input is a valid integer (i.e. all digits). As a
+first attempt, we could try the following, returning a \texttt{Bool} which
+indicates success:
+
+\begin{code}
+readInt : { [STATE (Vect n Int), STDIO] ==>
+            [STATE (Vect (S n) Int), STDIO] } Eff IO Bool
+readInt = do let x = trim !getStr
+             case all isDigit (unpack x) of
+                  False => pure False
+                  True => do putM (cast x :: !get)
+                             pure True
+\end{code}
+
+\noindent
+Unfortunately, this will not type check because the vector does not get
+extended in both branches of the \texttt{case}!
+
+\begin{code}
+MutState.idr:18:19:When elaborating right hand side of Main.case 
+block in readInt:
+Unifying n and S n would lead to infinite value
+\end{code}
+
+\noindent
+Clearly, the size of the resulting vector depends on whether or not the
+value read from the user was valid. We can express this in the type:
+
+\begin{code}
+readInt : { [STATE (Vect n Int), STDIO] ==>
+            {ok} if ok then [STATE (Vect (S n) Int), STDIO]
+                       else [STATE (Vect n Int), STDIO] }
+readInt = do let x = trim !getStr
+             case all isDigit (unpack x) of
+                  False => with_val False (pure ())
+                  True => do putM (cast x :: !get)
+                             with_val True (pure ())
+\end{code}
+
+\noindent
+The notation \texttt{\{ xs ==> {res} xs' \} Eff m a} in a type means that the
+effects available are updated from \texttt{xs} to \texttt{xs'}, \emph{and}
+the resulting effects \texttt{xs'} may depend on the result of the operation
+\texttt{res}, of type \texttt{a}. Here, the resulting effects are computed
+from the result \texttt{ok}---if \texttt{True}, the vector is extended, otherwise
+it remains the same. We also use \texttt{with\_val} to return a result:
+
+\begin{code}
+with_val : (val : a) -> 
+           ({ xs ==> xs' val } Eff m ()) -> { xs ==> xs' } Eff m a
+\end{code}
+
+\noindent
+We cannot use \texttt{pure} here, as before, since \texttt{pure} does not allow
+the returned value to update the effects list. The purpose of \texttt{with\_val}
+is to update the effects before returning. As a shorthand, we can write
+
+\begin{code}
+pureM val
+\end{code}
+
+\ldots instead of\ldots
+
+\begin{code}
+with_val val (pure ())
+\end{code}
+
+\noindent
+\ldots so our program is:
+
+\begin{code}
+readInt : { [STATE (Vect n Int), STDIO] ==>
+            {ok} if ok then [STATE (Vect (S n) Int), STDIO]
+                       else [STATE (Vect n Int), STDIO] }
+readInt = do let x = trim !getStr
+             case all isDigit (unpack x) of
+                  False => pureM False
+                  True => do putM (cast x :: !get)
+                             pureM True
+\end{code}
+
+\noindent
+When using the function, we will naturally have to check its return value
+in order to know what the new set of effects is. For example, to read a set
+number of values into a vector, we could write the following:
+
+\begin{code}
+readN : (n : Nat) ->
+        { [STATE (Vect m Int), STDIO] ==>
+          [STATE (Vect (n + m) Int), STDIO] } Eff IO ()
+readN Z = pure ()
+readN {m} (S k) = case !readInt of
+                      True => rewrite plusSuccRightSucc k m in readN k
+                      False => readN (S k)
+\end{code}
+
+\noindent
+The \texttt{case} analysis on the result of \texttt{readInt} means that
+we know in each branch whether reading the integer succeeded, and therefore
+how many values still need to be read into the vector.
+
+\textbf{Aside:} Only \texttt{case} will work here. We cannot use
+\texttt{if/then/else} because the \texttt{then} and \texttt{else} branches must
+have the same type. The \texttt{case} construct, however,
+abstracts over the value being inspected in the type of each branch.
+
+
+\subsection{File Management}
 
 \begin{code}[float=h,frame=single, caption={File I/O Effect}, label=eff:fileio]
 module Effect.File
