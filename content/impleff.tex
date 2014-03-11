@@ -107,7 +107,8 @@ takes:
 \texttt{State})
 \item The effectful operation (either \texttt{Get} or \texttt{Put x} for
 \texttt{State})
-\item A \emph{continuation} which should be passed the result value of the
+\item A \emph{continuation}, which we conventionally call \texttt{k},
+and should be passed the result value of the
 operation, and an updated resource.
 \end{itemize}
 
@@ -199,10 +200,92 @@ putM val = Put val
 
 \subsection{Console I/O}
 
+Listing \ref{eff:stdiodef} gives the definition of the
+\texttt{STDIO} effect, including handlers for \texttt{IO} and
+\texttt{IOExcept}. We omit the definition of the top level \texttt{Eff}
+functions, as this merely invoke the effects \texttt{PutStr}, \texttt{GetStr},
+\texttt{PutCh} and \texttt{GetCh} directly.
+
+Note that in this case, the resource is the unit type in every case, since
+the handlers merely apply the \texttt{IO} equivalents of the effects
+directly.
+
+\begin{code}[float=h,frame=single, caption={Console I/O Effect Definition}, label=eff:stdiodef]
+data StdIO : Effect where
+     PutStr : String -> { () } StdIO () 
+     GetStr : { () } StdIO String 
+     PutCh : Char -> { () } StdIO ()
+     GetCh : { () } StdIO Char
+
+instance Handler StdIO IO where
+    handle () (PutStr s) k = do putStr s; k () ()
+    handle () GetStr     k = do x <- getLine; k x ()
+    handle () (PutCh c)  k = do putChar c; k () () 
+    handle () GetCh      k = do x <- getChar; k x ()
+
+instance Handler StdIO (IOExcept a) where
+    handle () (PutStr s) k = do ioe_lift $ putStr s; k () ()
+    handle () GetStr     k = do x <- ioe_lift $ getLine; k x ()
+    handle () (PutCh c)  k = do ioe_lift $ putChar c; k () () 
+    handle () GetCh      k = do x <- ioe_lift $ getChar; k x ()
+
+STDIO : EFFECT
+STDIO = MkEff () StdIO
+\end{code}
+
 \subsection{Exceptions}
+
+Listing \ref{eff:exceptdef} gives the definition of the \texttt{Exception}
+effect, including two of its handlers for \texttt{Maybe} and \texttt{List}.
+The only operation provided is \texttt{Raise}. 
+
+The key point to note in the definitions of these handlers is that the
+continuation \texttt{k} is not used. Running \texttt{Raise} therefore means
+that computation stops with an error.
+
+\begin{code}[float=h,frame=single, caption={Exception Effect Definition}, label=eff:exceptdef]
+data Exception : Type -> Effect where 
+     Raise : a -> { () } Exception a b
+
+instance Handler (Exception a) Maybe where
+     handle _ (Raise e) k = Nothing
+
+instance Handler (Exception a) List where
+     handle _ (Raise e) k = []
+
+EXCEPTION : Type -> EFFECT
+EXCEPTION t = MkEff () (Exception t)
+\end{code}
 
 \subsection{Non-determinism}
 
+Listing \ref{eff:selectdef} gives the definition of the \texttt{Select} effect
+for writing non-deterministic programs, including a handler for \texttt{List}
+context which returns all possible successful values, and a handler for
+\texttt{Maybe} context which returns the first successful value.
+
+Here, the continuation is called multiple times in each handler, for each
+value in the list of possible values. In the \texttt{List} handler, we
+accumulate all successful results, and in the \texttt{Maybe} handler we
+try the first value in the last, and try later values only if that fails.
+
+\begin{code}[float=h,frame=single, caption={Non-determinism Effect Definition}, label=eff:selectdef]
+data Selection : Effect where
+     Select : List a -> { () } Selection a 
+
+instance Handler Selection Maybe where
+     handle _ (Select xs) k = tryAll xs where
+         tryAll [] = Nothing
+         tryAll (x :: xs) = case k x () of
+                                 Nothing => tryAll xs
+                                 Just v => Just v
+
+instance Handler Selection List where
+     handle r (Select xs) k = concatMap (\x => k x r) xs
+
+SELECT : EFFECT
+SELECT = MkEff () Selection
+\end{code}
 
 \subsection{Example: A Hangman Game}
 
