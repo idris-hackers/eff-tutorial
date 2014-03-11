@@ -287,5 +287,47 @@ SELECT : EFFECT
 SELECT = MkEff () Selection
 \end{code}
 
-\subsection{Example: A Hangman Game}
+\subsection{File Management}
 
+Result-dependent effects are no different from non-dependent effects in
+the way they are implemented. Listing \ref{eff:filedef} illustrates this
+for the \texttt{FILE\_IO} effect. The syntax for state transitions 
+\texttt{\{ x ==> \{res\} x' \}}, where the result state \texttt{x'} is
+computed from the result of the operation \texttt{res}, 
+follows that for the equivalent
+\texttt{Eff} programs.
+
+Note that in the handler for \texttt{Open}, the types passed to the
+continuation \texttt{k} are different depending on whether the result
+is \texttt{True} (opening succeeded) or \texttt{False} (opening failed).
+This uses \texttt{validFile}, defined in the \texttt{Prelude}, to test
+whether a file handler refers to an open file or not.
+
+\begin{code}[float=h,frame=single, caption={File I/O Effect Definition}, label=eff:filedef]
+data FileIO : Effect where
+     Open  : String -> (m : Mode) -> 
+             {() ==> {res} if res then OpenFile m else ()} FileIO Bool
+     Close : {OpenFile m ==> ()}                           FileIO () 
+
+     ReadLine  :           {OpenFile Read}  FileIO String 
+     WriteLine : String -> {OpenFile Write} FileIO ()
+     EOF       :           {OpenFile Read}  FileIO Bool
+
+instance Handler FileIO IO where
+    handle () (Open fname m) k = do h <- openFile fname m
+                                    if !(validFile h)
+                                             then k True (FH h) 
+                                             else k False ()
+    handle (FH h) Close      k = do closeFile h
+                                    k () ()
+
+    handle (FH h) ReadLine        k = do str <- fread h
+                                         k str (FH h)
+    handle (FH h) (WriteLine str) k = do fwrite h str
+                                         k () (FH h)
+    handle (FH h) EOF             k = do e <- feof h
+                                         k e (FH h)
+
+FILE_IO : Type -> EFFECT
+FILE_IO t = MkEff t FileIO
+\end{code}
