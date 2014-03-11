@@ -1,5 +1,174 @@
-\section{Example: A Hangman Game}
+\section{Example: A ``Mystery Word'' Guessing Game}
 
 In this section, we will use the techniques and specific effects discussed
 in the tutorial so far to implement a larger example, a simple text-based
-game.
+word-guessing game. In the game, the computer chooses a word, which the
+player must guess letter by letter. After a limited number of wrong
+guesses, the player loses\footnote{Readers may recognise this game
+by the name ``Hangman.''}.
+
+We will implement the game by following these steps:
+
+\begin{enumerate}
+\item Define the game state, in enough detail to express the rules
+\item Define the rules of the game (i.e. what actions the player may take, 
+and how these actions affect the game state)
+\item Implement the rules of the game (i.e. implement state updates for each 
+action)
+\item Implement a user interface which allows a player to direct actions
+\end{enumerate}
+
+\noindent
+Step 2 may be achieved by defining an effect which depends on the state defined
+in step 1. Then step 3 involves implementing a \texttt{Handler} for this effect.
+Finally, step 4 involves implementing a program in \texttt{Eff} using the
+newly defined effect (and any others requries to implement the interface).
+
+\subsection{Step 1: Game State}
+
+Firstly, we categorise the game states as running games (where there are a 
+number of guesses available, and a number of letters still to guess), or
+non-running games (i.e. games which have not been started, or games which
+have been won or lost).
+
+\begin{code}
+data GState = Running Nat Nat | NotRunning
+\end{code}
+
+\noindent
+Notice that at this stage, we say nothing about what it means to make a guess,
+what the word to be guessed is, how to guess letters, or any other implementation
+detail. We are only interested in what is necessary to describe the game
+rules.
+
+We will, however, parameterise a concrete game state \texttt{Mystery} over
+this data:
+
+\begin{code}
+data Mystery : GState -> Type
+\end{code}
+
+\subsection{Step 2: Game Rules}
+
+\begin{code}
+data MysteryRules : Effect where
+     Guess : (x : Char) ->
+             { Mystery (Running (S g) (S w)) ==>
+               {inword} if inword then Mystery (Running (S g) w)
+                                  else Mystery (Running g (S w)) }
+                MysteryRules Bool
+     Won  : { Mystery (Running g 0) ==> Mystery NotRunning } MysteryRules ()
+     Lost : { Mystery (Running 0 g) ==> Mystery NotRunning } MysteryRules ()
+     NewWord : (w : String) ->
+               { h ==> Mystery (Running 6 (length (letters w))) } MysteryRules
+     Get  : { h } MysteryRules h
+\end{code}
+
+
+\subsection{Step 3: Implement Rules}
+
+\begin{code}
+data Mystery : GState -> Type where
+     Init     : Mystery NotRunning 
+     GameWon  : (word : String) -> Mystery NotRunning
+     GameLost : (word : String) -> Mystery NotRunning
+     MkH      : (word : String) ->
+                (guesses : Nat) ->
+                (got : List Char) ->
+                (missing : Vect m Char) ->
+                Mystery (Running guesses m)
+\end{code}
+
+\noindent
+To initialise the state:
+
+\begin{code}
+letters : String -> List Char
+initState : (x : String) -> Mystery (Running 6 (length (letters x)))
+\end{code}
+
+\begin{code}
+data IsElem : a -> Vect n a -> Type where
+     First : IsElem x (x :: xs)
+     Later : IsElem x xs -> IsElem x (y :: xs)
+
+isElem : DecEq a => (x : a) -> (xs : Vect n a) -> Maybe (IsElem x xs)
+shrink : (xs : Vect (S n) a) -> IsElem x xs -> Vect n a
+\end{code}
+
+\begin{code}
+using (m : Type -> Type)
+  instance Handler MysteryRules m where
+    handle (MkH w g got []) Won k = k () (GameWon w)
+    handle (MkH w Z got m) Lost k = k () (GameLost w)
+  
+    handle st Get k = k st st
+    handle st (NewWord w) k = k () (initState w)
+  
+    handle (MkH w (S g) got m) (Guess x) k =
+        case isElem x m of
+             Nothing => k False (MkH w _ got m)
+             (Just p) => k True (MkH w _ (x :: got) (shrink m p))
+\end{code}
+
+\subsection{Step 4: Implement Interface}
+
+\begin{code}
+game : { [MYSTERY (Running (S g) w), STDIO] ==>
+         [MYSTERY NotRunning, STDIO] } Eff IO ()
+\end{code}
+
+\noindent
+The type indicates that the game must start in a running state, with some
+guesses available, and get to a not running state (i.e. won or lost). 
+The complete implementation of \texttt{game} is presented in Listing
+\ref{mword}.
+
+\begin{code}
+runGame : { [MYSTERY NotRunning, RND, SYSTEM, STDIO] } Eff IO ()
+runGame = do srand (cast !time)
+             let w = index !(rndFin _) words
+             NewWord w
+             game
+             putStrLn (show !Get)
+\end{code}
+
+\begin{code}
+words : ?wlen
+words = with Vect ["idris","agda","haskell","miranda",
+         "java","javascript","fortran","basic",
+         "coffeescript","rust"]
+  
+wlen = proof search
+\end{code}
+
+\begin{code}[float=h,frame=single,caption={Mystery Word Game Implementation},label=mword]
+game : { [MYSTERY (Running (S g) w), STDIO] ==>
+         [MYSTERY NotRunning, STDIO] } Eff IO ()
+game {w=Z} = Won
+game {w=S _}
+     = do putStrLn (show !Get)
+          putStr "Enter guess: "
+          let guess = trim !getStr
+          case choose (not (guess == "")) of
+               (Left p) => processGuess (strHead' guess p)
+               (Right p) => do putStrLn "Invalid input!"
+                               game
+  where
+    processGuess : Char -> { [MYSTERY (Running (S g) (S w)), STDIO] ==>
+                             [MYSTERY NotRunning, STDIO] }
+                           Eff IO ()
+    processGuess {g} {w} c
+      = case !(Main.Guess c) of
+             True => do putStrLn "Good guess!"
+                        case w of
+                             Z => Won
+                             (S k) => game
+             False => do putStrLn "No, sorry"
+                         case g of
+                              Z => Lost
+                              (S k) => game
+\end{code}
+
+
+
