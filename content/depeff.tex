@@ -159,15 +159,37 @@ readN {m} (S k) = case !readInt of
 \noindent
 The \texttt{case} analysis on the result of \texttt{readInt} means that
 we know in each branch whether reading the integer succeeded, and therefore
-how many values still need to be read into the vector.
+how many values still need to be read into the vector. What this means in
+practice is that the type system has verified that a necessary dynamic
+check (i.e. whether reading a value succeeded) has indeed been done.
 
 \textbf{Aside:} Only \texttt{case} will work here. We cannot use
 \texttt{if/then/else} because the \texttt{then} and \texttt{else} branches must
 have the same type. The \texttt{case} construct, however,
 abstracts over the value being inspected in the type of each branch.
 
-
 \subsection{File Management}
+
+A practical use for dependent effects is in specifying resource usage protocols
+and verifying that they are executed correctly. For example, file management
+follows a resource usage protocol with the following (informally specified)
+requirements:
+
+\begin{itemize}
+\item It is necessary to open a file for reading before reading it
+\item Opening may fail, so the programmer should check whether opening 
+was successful
+\item A file which is open for reading must not be written to, and vice versa
+\item When finished, an open file handle should be closed
+\item When a file is closed, its handle should no longer be used
+\end{itemize}
+
+These requirements can be expressed formally in \effects{}, by creating
+a \texttt{FILE\_IO} effect parameterised over a file handle state, which
+is either empty, open for reading, or open for writing. The \texttt{FILE\_IO}
+effect's definition is given in Listing \ref{eff:fileio}. Note that this
+effect is mainly for illustrative purposes---typically we would also like to
+support random access files and better reporting of error conditions.
 
 \begin{code}[float=h,frame=single, caption={File I/O Effect}, label=eff:fileio]
 module Effect.File
@@ -191,4 +213,69 @@ eof       : Handler FileIO e =>
 
 instance Handler FileIO IO
 \end{code}
+
+\noindent
+In particular, consider the type of \texttt{open}:
+
+\begin{code}
+open  : Handler FileIO e => String -> (m : Mode) -> 
+        { [FILE_IO ()] ==> 
+          {ok} [FILE_IO (if ok then OpenFile m else ())] } Eff e Bool
+\end{code}
+
+\noindent
+This returns a \texttt{Bool} which indicates whether opening the file was
+successful. The resulting state depends on whether the operation was successful;
+if so, we have a file handle open for the stated purpose, and if not, we have
+no file handle. By \texttt{case} analysis on the result, we continue the
+protocol accordingly.
+
+\begin{code}[float=h,frame=single, caption={Reading a File}, label=eff:readfile]
+readFile : { [FILE_IO (OpenFile Read)] } Eff IO (List String)
+readFile = readAcc (List.Nil) where
+    readAcc : List String -> { [FILE_IO (OpenFile Read)] }
+              Eff IO (List String)
+    readAcc acc = if (not !eof)
+                     then readAcc (!readLine :: acc)
+                     else pure (reverse acc)
+\end{code}
+
+Given a function \texttt{readFile} (Listing \ref{eff:readfile})
+which reads from an open file until reaching the end, we can write a program
+which opens a file, reads it, then displays the contents and closes it,
+as follows, correctly following the protocol:
+
+\begin{code}
+dumpFile : String -> { [FILE_IO (), STDIO] } Eff IO ()
+dumpFile name = case !(open name Read) of
+                    True => do putStrLn (show !readFile)
+                               close
+                    False => putStrLn ("Error!")
+\end{code}
+
+\noindent
+The type of \texttt{dumpFile}, with \texttt{FILE\_IO ()} in its effect
+list, indicates that any use of the file resource will follow the protocol
+correctly (i.e. it both begins and ends with an empty resource). If we fail
+to follow the protocol correctly (perhaps by forgetting to close the file,
+failing to check that \texttt{open} succeeded, or opening the file for writing)
+then we will get a compile-time error. For example, changing \texttt{open name Read}
+to \texttt{open name Write} yields a compile-time error of the following
+form:
+
+\begin{code}
+FileTest.idr:16:18:When elaborating right hand side of Main.case 
+block in testFile:
+Can't solve goal 
+        SubList [(FILE_IO (OpenFile Read))]
+                [(FILE_IO (OpenFile Write)), STDIO]
+\end{code}
+
+\noindent
+That is, when reading, we need a file which is open for reading, but the
+effect list contains a \texttt{FILE\_IO} effect carrying a file open for
+writing.
+
+
+
 
