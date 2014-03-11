@@ -278,6 +278,56 @@ In other words: when reading a file, we need a file which is open for reading,
 but the effect list contains a \texttt{FILE\_IO} effect carrying a file open
 for writing.
 
+\subsection{Pattern-matching bind}
 
+It might seem that having to test each potentially failing operation with
+a \texttt{case} clause could lead to ugly code, with lots of nested case
+blocks. Many languages support exceptions to improve this, but unfortunately
+exceptions may not allow completely clean resource management---for example,
+guaranteeing that any \texttt{open} which did succeed has a corresponding close.
+
+Idris supports \emph{pattern-matching} bindings, such as the following:
+
+\begin{code}
+dumpFile : String -> { [FILE_IO (), STDIO] } Eff IO ()
+dumpFile name = do True <- open name Read 
+                   putStrLn (show !readFile)
+                   close
+\end{code}
+
+\noindent
+This also has a problem: we are no longer dealing with the case where
+opening a file failed! The \Idris{} solution is to extend the pattern-matching
+binding syntax to give brief clauses for failing matches. Here, for example,
+we could write:
+
+\begin{code}
+dumpFile : String -> { [FILE_IO (), STDIO] } Eff IO ()
+dumpFile name  = do True <- open name Read | False => putStrLn "Error"
+                    putStrLn (show !readFile)
+                    close
+\end{code}
+
+\noindent
+This is exactly equivalent to the definition with the explicit \texttt{case}.
+In general, in a \texttt{do}-block, the syntax\ldots
+
+\begin{code}
+do pat <- val | <alternatives>
+   p
+\end{code}
+
+\ldots is desugared to\ldots
+
+\begin{code}
+do x <- val
+   case x of
+        pat => p
+        <alternatives>
+\end{code}
+
+\noindent
+There can be several \texttt{alternatives}, separated by a vertical bar
+\texttt{|}.
 
 
