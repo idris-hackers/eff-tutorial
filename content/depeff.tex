@@ -1,5 +1,7 @@
 \section{Dependent Effects}
 
+\label{sect:depeff}
+
 In the programs we have seen so far, the available effects have remained
 constant. Sometimes, however, an operation can \emph{change} the available
 effects. The simplest example occurs when we have a state with a dependent
@@ -272,9 +274,9 @@ Can't solve goal
 \end{code}
 
 \noindent
-That is, when reading, we need a file which is open for reading, but the
-effect list contains a \texttt{FILE\_IO} effect carrying a file open for
-writing.
+In other words: when reading a file, we need a file which is open for reading,
+but the effect list contains a \texttt{FILE\_IO} effect carrying a file open
+for writing.
 
 
 

@@ -2,6 +2,207 @@
 
 \label{sect:impleff}
 
-Implementation of \texttt{STATE}, \texttt{EXCEPTION}, \texttt{SELECT}.
+We have now seen several side-effecting operations provided by the \effects{}
+library, and examples of their use in Section \ref{sect:simpleff}. We have also
+seen how operations may \emph{modify} the available effects by changing
+state in Section \ref{sect:depeff}. We have not, however, yet seen how 
+these operations are implemented. In this section, we describe how a selection
+of the available effects are implemented, and show how new effectful operations
+may be provided.
 
-Example: Hangman for protocols.
+\subsection{State}
+
+Effects are described by \emph{algebraic data types}, where the constructors
+describe the operations provided when the effect is available. Stateful
+operations are described as follows:
+
+\begin{code}
+data State : Effect where
+     Get :      { a }       State a
+     Put : b -> { a ==> b } State () 
+\end{code}
+
+\noindent
+Each effect is associated with a \emph{resource}, the type of which is given
+with the notation 
+\texttt{\{ x ==> x' \}}. This notation gives the resource type expected by
+each operation, and how it updates when the operation is run. Here, it means:
+
+\begin{itemize}
+\item \texttt{Get} takes no arguments. It has a resource of type \texttt{a},
+which is not updated, and running the \texttt{Get} operation returns something
+of type \texttt{a}.
+\item \texttt{Put} takes a \texttt{b} as an argument. It has a resource of type
+\texttt{a} on input, which is updated to a resource of type \texttt{b}.
+Running the \texttt{Put} operation returns the element of the unit type.
+\end{itemize}
+
+\noindent
+\texttt{Effect} itself is a type synonym, declared as follows:
+
+\begin{code}
+Effect : Type
+Effect = (result : Type) -> 
+         (input_resource : Type) -> 
+         (output_resource : result -> Type) -> Type
+\end{code}
+
+\noindent
+That is, an effectful operation returns something of type \texttt{result},
+has an input resource of type \texttt{input\_resource}, and a function
+\texttt{output\_resource} which computes the output resource type from
+the result. We use the same syntactic sugar as with \texttt{Eff} to make
+effect declarations more readable. It is defined as follows in
+the \effects{} library:
+
+\begin{code}
+syntax "{" [inst] "}" [eff] = eff inst (\result => inst)
+syntax "{" [inst] "==>" "{" {b} "}" [outst] "}" [eff] 
+       = eff inst (\b => outst)
+syntax "{" [inst] "==>" [outst] "}" [eff] = eff inst (\result => outst)
+\end{code}
+
+\noindent
+In order to convert \texttt{State} (of type \texttt{Effect}) into something
+usable in an effects list, of type \texttt{EFFECT}, we write the following:
+
+\begin{code}
+STATE : Type -> EFFECT
+STATE t = MkEff t State
+\end{code}
+
+\noindent
+\texttt{MkEff} constructs an \texttt{EFFECT} by taking the resource type
+(here, the \texttt{t} which parameterises \texttt{STATE})
+and the effect signature (here, \texttt{State}). For reference,
+\texttt{EFFECT} is declared as follows:
+
+\begin{code}
+data EFFECT : Type where
+     MkEff : Type -> Effect -> EFFECT
+\end{code}
+
+\noindent
+Recall that to run an effectful program in \texttt{Eff}, we use one of the
+\texttt{run} family of functions to run the program in a particular
+computation context \texttt{m}. For each effect, therefore, we must explain
+how it is executed in a particular computation context for \texttt{run} to
+work in that context. This is achieved with the following type class:
+
+\begin{code}
+class Handler (e : Effect) (m : Type -> Type) where
+      handle : resource -> (eff : e t resource resource') -> 
+               ((x : t) -> resource' x -> m a) -> m a
+\end{code}
+
+\noindent
+We have already seen some instance declarations 
+in the effect summaries in Section \ref{sect:simpleff}. An instance of
+\texttt{Handler e m} means that the effect declared with signature \texttt{e}
+can be run in computation context \texttt{m}. The \texttt{handle} function
+takes:
+
+\begin{itemize}
+\item The \texttt{resource} on input (so, the current value of the state for
+\texttt{State})
+\item The effectful operation (either \texttt{Get} or \texttt{Put x} for
+\texttt{State})
+\item A \emph{continuation} which should be passed the result value of the
+operation, and an updated resource.
+\end{itemize}
+
+\noindent
+There are two reasons for taking a continuation here: firstly, this is neater
+because there are multiple return values (a new resource and the result of
+the operation); secondly, and more importantly, the continuation can be called
+zero or more times.
+
+A \texttt{Handler} for \texttt{State} simply passes on the value of the state,
+in the case of \texttt{Get}, or passes on a new state, in the case of \texttt{Put}.
+It is defined the same way for all computation contexts\footnote{Recall that
+\texttt{using} notation simply gives a type for any implicit arguments in
+the \texttt{using} block}:
+
+\begin{code}
+using (m : Type -> Type)
+  instance Handler State m where
+     handle st Get     k = k st st
+     handle st (Put n) k = k () n
+\end{code}
+
+\noindent
+This gives enough information for \texttt{Get} and \texttt{Put} to be used
+directly in \texttt{Eff} programs. It is tidy, however, to define top level
+functions in \texttt{Eff}, as follows:
+
+\begin{code}
+get : { [STATE x] } Eff m x
+get = Get
+
+put : x -> { [STATE x] } Eff m () 
+put val = Put val
+
+putM : y -> { [STATE x] ==> [STATE y] } Eff m () 
+putM val = Put val
+\end{code}
+
+\noindent
+\textbf{An implementation detail (aside):} In fact, we are not really using
+the \texttt{Get} and \texttt{Put} operations directly. Rather, we are using
+an \texttt{implicit} function which converts an \texttt{Effect} to a 
+function in \texttt{Eff}, given an automatically constructed proof that the
+effect is available:
+
+\begin{code}
+implicit
+effect' : {a, b: _} -> {e : Effect} ->
+          (eff : e t a b) ->
+          {prf : EffElem e a xs} ->
+          Eff m t xs (\v => updateResTy v xs prf eff)
+\end{code}
+
+\noindent
+This is the reason for the \texttt{Can't solve goal} error when an effect is
+not available: the implicit proof \texttt{prf} has not been solved automatically
+because the required effect is not in the list of effects \texttt{xs}.
+
+Such details are not important for using the library, or even writing new
+effects, however. 
+
+\subsubsection*{Summary}
+
+Listing \ref{eff:statedef} summarises what is required to define the
+\texttt{STATE} effect.
+
+\begin{code}[float=h,frame=single, caption={Complete State Effect Definition}, label=eff:statedef]
+data State : Effect where
+     Get :      { a }       State a
+     Put : b -> { a ==> b } State () 
+
+STATE : Type -> EFFECT
+STATE t = MkEff t State
+
+using (m : Type -> Type)
+  instance Handler State m where
+     handle st Get     k = k st st
+     handle st (Put n) k = k () n
+
+get : { [STATE x] } Eff m x
+get = Get
+
+put : x -> { [STATE x] } Eff m () 
+put val = Put val
+
+putM : y -> { [STATE x] ==> [STATE y] } Eff m () 
+putM val = Put val
+\end{code}
+
+\subsection{Console I/O}
+
+\subsection{Exceptions}
+
+\subsection{Non-determinism}
+
+
+\subsection{Example: A Hangman Game}
+
