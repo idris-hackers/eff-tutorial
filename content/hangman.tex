@@ -26,7 +26,7 @@ newly defined effect (and any others requries to implement the interface).
 
 \subsection{Step 1: Game State}
 
-Firstly, we categorise the game states as running games (where there are a 
+First, we categorise the game states as running games (where there are a 
 number of guesses available, and a number of letters still to guess), or
 non-running games (i.e. games which have not been started, or games which
 have been won or lost).
@@ -50,6 +50,45 @@ data Mystery : GState -> Type
 
 \subsection{Step 2: Game Rules}
 
+We describe the game rules as a dependent effect, where each action
+has a \emph{precondition} (i.e. what the game state must be before carrying
+out the action) and a \emph{postcondition} (i.e. how the action affects
+the game state). Informally, these actions with the pre- and postconditions are:
+
+\begin{description}
+\item[Guess] Guess a letter in the word.
+\begin{itemize}
+\item Precondition: The game must be running, and there must be 
+both guesses still available, and letters still to be guessed.
+\item Postcondition: If the guessed letter is in the word and not yet guessed,
+reduce the number of letters, otherwise reduce the number of guesses.
+\end{itemize}
+\item[Won] Declare victory 
+\begin{itemize}
+\item Precondition: The game must be running, and there must be no letters
+still to be guessed.
+\item Postcondition: The game is no longer running.
+\end{itemize}
+\item[Lost] Accept defeat
+\begin{itemize}
+\item Precondition: The game must be running, and there must be no guesses left.
+\item Postcondition: The game is no longer running.
+\end{itemize}
+\item[NewWord] Set a new word to be guessed 
+\begin{itemize}
+\item Precondition: The game must not be running.
+\item Postcondition: The game is running, with 6 guesses available (the choice
+of 6 is somewhat arbitrary here) and the number of unique letters in the word
+still to be guessed.
+\end{itemize}
+\item[StrState] Get a string representation of the game state. This is for
+display purposes; there are no pre- or postconditions.
+\end{description}
+
+\noindent
+We can make these rules precise by declaring them more formally in an
+effect signature:
+
 \begin{code}
 data MysteryRules : Effect where
      Guess : (x : Char) ->
@@ -61,18 +100,34 @@ data MysteryRules : Effect where
      Lost : { Mystery (Running 0 g) ==> Mystery NotRunning } MysteryRules ()
      NewWord : (w : String) ->
                { h ==> Mystery (Running 6 (length (letters w))) } MysteryRules
-     Get  : { h } MysteryRules h
+     StrState : { Mystery h } MysteryRules String
 \end{code}
 
+\noindent
+This description says nothing about how the rules are implemented. In particular,
+it does not specify \emph{how} to tell whether a guessed letter was in a word,
+just that the result of \texttt{Guess} depends on it.
+
+Nevertheless, we can still create an \texttt{EFFECT} from this, and use it
+in an \texttt{Eff} program. Implementing a \texttt{Handler} for
+\texttt{MysteryRules} will then allow us to play the game.
+
+\begin{code}
+MYSTERY : GState -> EFFECT
+MYSTERY h = MkEff (Mystery h) MysteryRules
+\end{code}
 
 \subsection{Step 3: Implement Rules}
+
+To \emph{implement} the rules, we begin by giving a concrete definition of
+game state:
 
 \begin{code}
 data Mystery : GState -> Type where
      Init     : Mystery NotRunning 
      GameWon  : (word : String) -> Mystery NotRunning
      GameLost : (word : String) -> Mystery NotRunning
-     MkH      : (word : String) ->
+     MkG      : (word : String) ->
                 (guesses : Nat) ->
                 (got : List Char) ->
                 (missing : Vect m Char) ->
@@ -80,12 +135,28 @@ data Mystery : GState -> Type where
 \end{code}
 
 \noindent
-To initialise the state:
+If a game is \texttt{NotRunning}, that is either because it
+has not yet started (\texttt{Init}) or because it is won or lost (\texttt{GameWon}
+and \texttt{GameLost}, each of which carry the word so that showing the game
+state will reveal the word to the player). Finally, \texttt{MkG} captures a 
+running game's state, including the target word, the letters successfully
+guessed, and the missing letters. Using a \texttt{Vect} for the missing
+letters is convenient since its length is used in the type.
+
+To initialise the state, we implement the following functions: \texttt{letters},
+which returns a list of unique letters in a \texttt{String} (ignoring spaces)
+and \texttt{initState} which sets up an initial state considered valid as a
+postcondition for \texttt{NewWord}.
 
 \begin{code}
 letters : String -> List Char
 initState : (x : String) -> Mystery (Running 6 (length (letters x)))
 \end{code}
+
+\noindent
+When checking if a guess is in the vector of missing letters, it is convenient
+to return a \emph{proof} that the guess is in the vector, using \texttt{isElem}
+below, rather than merely a \texttt{Bool}:
 
 \begin{code}
 data IsElem : a -> Vect n a -> Type where
@@ -93,25 +164,49 @@ data IsElem : a -> Vect n a -> Type where
      Later : IsElem x xs -> IsElem x (y :: xs)
 
 isElem : DecEq a => (x : a) -> (xs : Vect n a) -> Maybe (IsElem x xs)
+\end{code}
+
+\noindent
+The reason for returning a proof is that we can use it to remove an element
+from the correct position in a vector:
+
+\begin{code}
 shrink : (xs : Vect (S n) a) -> IsElem x xs -> Vect n a
 \end{code}
+
+\noindent
+We leave the definitions of \texttt{letters}, \texttt{init}, \texttt{isElem}
+and \texttt{shrink} as exercises. Having implemented these, the \texttt{Handler}
+implementation for \texttt{MysteryRules} is surprisingly straightforward:
 
 \begin{code}
 using (m : Type -> Type)
   instance Handler MysteryRules m where
-    handle (MkH w g got []) Won k = k () (GameWon w)
-    handle (MkH w Z got m) Lost k = k () (GameLost w)
+    handle (MkG w g got []) Won k = k () (GameWon w)
+    handle (MkG w Z got m) Lost k = k () (GameLost w)
   
-    handle st Get k = k st st
+    handle st StrState k = k (show st) st
     handle st (NewWord w) k = k () (initState w)
   
-    handle (MkH w (S g) got m) (Guess x) k =
+    handle (MkG w (S g) got m) (Guess x) k =
         case isElem x m of
-             Nothing => k False (MkH w _ got m)
-             (Just p) => k True (MkH w _ (x :: got) (shrink m p))
+             Nothing => k False (MkG w _ got m)
+             (Just p) => k True (MkG w _ (x :: got) (shrink m p))
 \end{code}
 
+\noindent
+Each case simply involves directly updating the game state in a way which
+is consistent with the declared rules. In particular, in \texttt{Guess}, if
+the handler claims that the guessed letter is in the word (by passing
+\texttt{True} to \texttt{k}), there is no way to update the state in such
+a way that the number of missing letters or number of guesses does not
+follow the rules.
+
 \subsection{Step 4: Implement Interface}
+
+Having described the rules, and implemented state transitions which follow
+those rules as an effect handler, we can now write an interface for the
+game which uses the \texttt{MYSTERY} effect:
 
 \begin{code}
 game : { [MYSTERY (Running (S g) w), STDIO] ==>
@@ -120,9 +215,20 @@ game : { [MYSTERY (Running (S g) w), STDIO] ==>
 
 \noindent
 The type indicates that the game must start in a running state, with some
-guesses available, and get to a not running state (i.e. won or lost). 
-The complete implementation of \texttt{game} is presented in Listing
-\ref{mword}.
+guesses available, and eventually reach a not-running state (i.e. won or lost). 
+The only way to achieve this is by correctly following the stated rules.
+A possible complete implementation of \texttt{game} is presented in Listing
+\ref{mword}. 
+
+Note that the type of \texttt{game} makes no assumption that there
+are letters to be guessed in the given word (i.e. it is \texttt{w} rather than
+\texttt{S w}). This is because we will be choosing a word at random from a
+vector of \texttt{String}s, and at no point have we made it explicit that
+those \texttt{String}s are non-empty.
+
+Finally, we need to initialise the game by picking a word at random from a
+list of candidates, setting it as the target using \texttt{NewWord}, then
+running \texttt{game}:
 
 \begin{code}
 runGame : { [MYSTERY NotRunning, RND, SYSTEM, STDIO] } Eff IO ()
@@ -130,24 +236,37 @@ runGame = do srand (cast !time)
              let w = index !(rndFin _) words
              NewWord w
              game
-             putStrLn (show !Get)
+             putStrLn !StrState
 \end{code}
 
+\noindent
+We use the system time (\texttt{time} from the \texttt{SYSTEM} effect; see
+Appendix \ref{sect:appendix}) to initialise the random number generator,
+then pick a random \texttt{Fin} to index into a list of \texttt{words}.
+For example, we could initialise a word list as follows:
+
 \begin{code}
-words : ?wlen
+words : ?wtype
 words = with Vect ["idris","agda","haskell","miranda",
          "java","javascript","fortran","basic",
          "coffeescript","rust"]
   
-wlen = proof search
+wtype = proof search
 \end{code}
+
+\noindent
+\textbf{Aside:} 
+Rather than have to explicitly declare a type with the vector's length, it
+is convenient to give a metavariable \texttt{?wtype} and let \Idris{}'s
+proof search mechanism find the type. This is a limited form of type
+inference, but very useful in practice.
 
 \begin{code}[float=h,frame=single,caption={Mystery Word Game Implementation},label=mword]
 game : { [MYSTERY (Running (S g) w), STDIO] ==>
          [MYSTERY NotRunning, STDIO] } Eff IO ()
 game {w=Z} = Won
 game {w=S _}
-     = do putStrLn (show !Get)
+     = do putStrLn !StrState
           putStr "Enter guess: "
           let guess = trim !getStr
           case choose (not (guess == "")) of
@@ -170,5 +289,34 @@ game {w=S _}
                               (S k) => game
 \end{code}
 
+\subsection{Discussion}
+
+Writing the rules separately as an effect, then an implementation which uses
+that effect, ensures that the implementation must follow the rules. This has
+practical applications in more serious contexts; \texttt{MysteryRules} for
+example can be though of as describing a \emph{protocol} that a game
+player most follow, or alternative a \emph{precisely-typed API}.
+
+In practice, we wouldn't really expect to write rules first then implement
+the game once the rules were complete. Indeed, I didn't do so when constructing
+this example! Rather, I wrote down a set of likely rules making 
+any assumptions \emph{explicit} in the state transitions for \texttt{MysteryRules}. 
+Then, when implementing \texttt{game} at
+first, any incorrect assumption was caught as a type error. The following
+errors were caught during development:
+
+\begin{itemize}
+\item Not realising that allowing \texttt{NewWord} to be an arbitrary string
+would mean that \texttt{game} would have to deal with a zero-length word as
+a starting state.
+\item Forgetting to check whether a game was won before recursively calling
+\texttt{processGuess}, thus accidentally continuing a finished game.
+\item Accidentally checking the number of missing letters, rather than the
+number of remaining guesses, when checking if a game was lost.
+\end{itemize}
+
+\noindent
+These are, of course, simple errors, but were caught by the type checker before
+any testing of the game.
 
 
