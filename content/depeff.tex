@@ -234,7 +234,7 @@ protocol accordingly.
 
 \begin{code}[float=h,frame=single, caption={Reading a File}, label=eff:readfile]
 readFile : { [FILE_IO (OpenFile Read)] } Eff IO (List String)
-readFile = readAcc (List.Nil) where
+readFile = readAcc [] where
     readAcc : List String -> { [FILE_IO (OpenFile Read)] }
               Eff IO (List String)
     readAcc acc = if (not !eof)
@@ -328,6 +328,42 @@ do x <- val
 
 \noindent
 There can be several \texttt{alternatives}, separated by a vertical bar
-\texttt{|}.
+\texttt{|}. For example, there is a \texttt{SYSTEM} effect which supports
+reading command line arguments, among other things (see Appendix
+\ref{sect:appendix}). To read command
+line arguments, we can use \texttt{getArgs}:
 
+\begin{code}
+getArgs : Handler System e => { [SYSTEM] } Eff e (List String)
+\end{code}
+
+\noindent
+A main program can read command line arguments as follows, where in the
+list which is returned, the first element \texttt{prog} is the executable name
+and the second is an expected argument:
+
+\begin{code}
+emain : { [SYSTEM, STDIO] } Eff IO ()
+emain = do [prog, arg] <- getArgs 
+           putStrLn $ "Argument is " ++ arg
+           {- ... rest of function ... -}
+\end{code}
+
+\noindent
+Unfortunately, this will not fail gracefully if no argument is given, or
+if too many arguments are given. We can use pattern matching bind alternatives
+to give a better (more informative) error:
+
+\begin{code}
+emain : { [SYSTEM, STDIO] } Eff IO ()
+emain = do [prog, arg] <- getArgs | [] => putStrLn "Can't happen!"
+                                  | [prog] => putStrLn "No arguments!"
+                                  | _ => putStrLn "Too many arguments!"
+           putStrLn $ "Argument is " ++ arg
+           {- ... rest of function ... -}
+\end{code}
+
+\noindent
+If \texttt{getArgs} does not return something of the form \texttt{[prog, arg]}
+the alternative which does match is executed instead, and that value returned.
 
