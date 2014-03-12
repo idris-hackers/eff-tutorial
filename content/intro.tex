@@ -79,27 +79,25 @@ is required for all examples in this tutorial):
 
 %FIXME: \effects{} macro didn't work here, make sure to update it...
 \begin{code}
-$ idris hello.idr -o hello -p neweffects
+$ idris hello.idr -o hello -p effects
 $ ./hello
 Hello world!
 \end{code}
 
 \subsection{Outline}
 
-TODO: Lots of examples. We will have, roughly:
+The tutorial is structured as follows: first, in Section \ref{sect:state},
+we will discuss state management, describing why it is important and introducing
+the \effects{} library to show how it can be used to manage state. This section
+also gives an overview of the syntax of effectful programs. Section
+\ref{sect:simpleff} then introduces a number of other effects a program may
+have: I/O; Exceptions; Random Numbers; and Non-determinism, giving examples
+for each, and an extended example combining several effects in one complete
+program. Section \ref{sect:depeff} introduces \emph{dependent} effects, showing
+how states and resources can be managed in types. Section \ref{sect:impleff}
+shows how new effects can be implemented. Section \ref{sect:hangman}
+gives an extended example showing how to implement a ``mystery word'' guessing
+game, using effects to describe the rules of the game and ensure they are
+implemented accurately. References to further reading are given in
+Section \ref{sect:further}.
 
-\begin{itemize}
-\item Programming with state, multiple states and labelling.
-\item Exceptions --- expression evaluator example
-\begin{itemize}
-\item Extend with random numbers, I/O for debugging.
-\end{itemize}
-\item Resource dependent effects
-\begin{itemize}
-\item File I/O
-\item Dependent types in state
-\end{itemize}
-\item An imperative language with effects
-\item Hangman, rules as a protocol
-\item Space invaders overview?
-\end{itemize}

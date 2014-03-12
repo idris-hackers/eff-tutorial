@@ -1,5 +1,31 @@
-\section{Summary and Further Reading}
+\section{Further Reading}
 
-(Pointers to various algebraic effects papers. Also SDL, Protocol libraries,
-Memory effect in \effects{} library.)
+\label{sect:further}
+
+This tutorial has given an introduction to writing and reasoning about
+side-effecting programs in \Idris{}, using the \effects{} library. More
+details about the \emph{implementation} of the library, such as how
+\texttt{run} works, how handlers are invoked, etc, are given in a
+separate paper~\cite{brady-icfp2013}.
+
+Some libraries and programs which use \effects{} can be found in the following
+places:
+
+\begin{itemize}
+\item \url{http://github.com/edwinb/SDL-idris} --- some bindings for the SDL media
+library, supporting graphics in particular.
+\item \url{http://github.com/edwinb/idris-demos} --- various \Idris{} demonstration
+programs, including several \effects{} examples from this tutorial, and
+a ``Space Invaders'' game.
+\item \url{https://github.com/SimonJF/IdrisNet2} --- networking and socket libraries.
+\item \url{http://github.com/edwinb/Protocols} --- a high level communication
+protocol description language.
+\end{itemize}
+
+The inspiration for the \effects{} library was Bauer and Pretnar's
+Eff language~\cite{Bauer}, which describes a langauge based on algebraic
+effects and handlers. Other recent languages and libraries have also been built
+on this ideas, e.g.\cite{Lippmeier2009,handlers2013}. The theoretical
+foundations are also
+well-studied~\cite{Hyland2006,Levy2001,Plotkin2009,Pretnar2010}.
 
