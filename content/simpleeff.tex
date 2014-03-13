@@ -522,7 +522,7 @@ be undefined.
 
 \begin{code}
 data Expr = Val Integer
-          | Var Expr
+          | Var String
           | Add Expr Expr
 \end{code}
 
@@ -580,7 +580,7 @@ a random number up to a maximum value:
 
 \begin{code}
 data Expr = Val Integer
-          | Var Expr
+          | Var String
           | Add Expr Expr
           | Random Integer
 \end{code}

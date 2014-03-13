@@ -94,7 +94,10 @@ That is, the return type gives the effects that \texttt{f} supports
 (\texttt{effs}, of type \texttt{List EFFECT}), 
 the \emph{computation context} it runs in (\texttt{m}) and the
 type the computation returns \texttt{t}. The computation context can be
-any function of type \texttt{Type -> Type}, for example \texttt{id}. So, our
+any function of type \texttt{Type -> Type}, for example \texttt{id}. 
+When we come to run an effectful program in \texttt{\{ effs \} Eff m t},
+the result will be of type \texttt{m t}.
+So, our
 \texttt{treeTagAux} helper could be written with the following type:
 
 \begin{code}
@@ -105,14 +108,14 @@ treeTagAux : BTree a -> { [STATE Int] } Eff id (BTree (Int, a))
 That is, \texttt{treeTagAux} has access to an integer state, because the
 list of available effects includes \texttt{STATE Int}. \texttt{STATE} is
 declared as follows in the module \texttt{Effect.State} (that is, we must
-\texttt{import Effect.State} to be able to use it:
+\texttt{import Effect.State} to be able to use it):
 
 \begin{code}
 STATE : Type -> EFFECT
 \end{code}
 
 \noindent
-That is, it is an effect parameterised by a type (by convention, we write
+It is an effect parameterised by a type (by convention, we write
 effects in all capitals).
 The \texttt{treeTagAux} function runs in the
 identity computation context and
@@ -150,7 +153,8 @@ an effectful operation.
 \noindent
 The \texttt{get} and \texttt{put} functions read and write a state \texttt{t}, 
 assuming that the \texttt{STATE t} effect is available. They have the following
-types, polymorphic in the state \texttt{t} they manage:
+types, polymorphic in the state \texttt{t} they manage and the context
+\texttt{m} in which they run:
 
 \begin{code}
 get :      { [STATE t] } Eff m t
