@@ -93,7 +93,7 @@ value read from the user was valid. We can express this in the type:
 \begin{code}
 readInt : { [STATE (Vect n Int), STDIO] ==>
             {ok} if ok then [STATE (Vect (S n) Int), STDIO]
-                       else [STATE (Vect n Int), STDIO] }
+                       else [STATE (Vect n Int), STDIO] } Eff IO Bool
 readInt = do let x = trim !getStr
              case all isDigit (unpack x) of
                   False => with_val False (pure ())
