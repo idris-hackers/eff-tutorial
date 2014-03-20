@@ -101,7 +101,8 @@ data MysteryRules : Effect where
      Won  : { Mystery (Running g 0) ==> Mystery NotRunning } MysteryRules ()
      Lost : { Mystery (Running 0 g) ==> Mystery NotRunning } MysteryRules ()
      NewWord : (w : String) ->
-               { h ==> Mystery (Running 6 (length (letters w))) } MysteryRules
+               { Mystery NotRunning ==>
+                 Mystery (Running 6 (length (letters w))) } MysteryRules ()
      StrState : { Mystery h } MysteryRules String
 \end{code}
 

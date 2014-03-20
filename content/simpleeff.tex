@@ -593,7 +593,7 @@ appears in the list, as long as it is present:
 \begin{code}
 eval : Expr -> { [EXCEPTION String, RND, STATE Env] } Eff m Integer
 
-eval (Random upper) = return !(rndInt 0 upper)
+eval (Random upper) = rndInt 0 upper
 \end{code}
 
 \noindent
