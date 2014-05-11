@@ -532,7 +532,7 @@ putM : y -> { [STATE x] ==> [STATE y] } Eff m ()
 Also, we have:
 
 \begin{code}
-{ {res} xs ==> xs' } Eff m a
+{ xs ==> {res} xs' } Eff m a
 \end{code}
 
 \ldots which is expanded to \ldots
