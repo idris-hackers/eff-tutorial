@@ -246,7 +246,7 @@ EXCEPTION t = MkEff () (Exception t)
 Listing \ref{eff:exceptdef} gives the definition of the \texttt{Exception}
 effect, including two of its handlers for \texttt{Maybe} and \texttt{List}.
 The only operation provided is \texttt{Raise}. 
-
+%
 The key point to note in the definitions of these handlers is that the
 continuation \texttt{k} is not used. Running \texttt{Raise} therefore means
 that computation stops with an error.
