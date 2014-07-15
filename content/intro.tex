@@ -59,7 +59,7 @@ module Main
   
 import Effect.StdIO
   
-hello : { [STDIO] } Eff IO ()
+hello : { [STDIO] } Eff ()
 hello = putStrLn "Hello world!"
   
 main : IO ()
@@ -69,7 +69,7 @@ main = run hello
 \noindent
 As usual, the entry point is \texttt{main}. All \texttt{main} has to do is
 invoke the \texttt{hello} function which supports the \texttt{STDIO} effect
-for console I/O, runs in the \texttt{IO} context, and returns the unit
+for console I/O, and returns the unit
 value. The details of the \texttt{Eff} type will be presented in the
 remainder of this tutorial.
 

@@ -183,8 +183,7 @@ and \texttt{shrink} as exercises. Having implemented these, the \texttt{Handler}
 implementation for \texttt{MysteryRules} is surprisingly straightforward:
 
 \begin{code}
-using (m : Type -> Type)
-  instance Handler MysteryRules m where
+instance Handler MysteryRules m where
     handle (MkG w g got []) Won k = k () (GameWon w)
     handle (MkG w Z got m) Lost k = k () (GameLost w)
   
@@ -213,7 +212,7 @@ game which uses the \texttt{MYSTERY} effect:
 
 \begin{code}
 game : { [MYSTERY (Running (S g) w), STDIO] ==>
-         [MYSTERY NotRunning, STDIO] } Eff IO ()
+         [MYSTERY NotRunning, STDIO] } Eff ()
 \end{code}
 
 \noindent
@@ -234,7 +233,7 @@ list of candidates, setting it as the target using \texttt{NewWord}, then
 running \texttt{game}:
 
 \begin{code}
-runGame : { [MYSTERY NotRunning, RND, SYSTEM, STDIO] } Eff IO ()
+runGame : { [MYSTERY NotRunning, RND, SYSTEM, STDIO] } Eff ()
 runGame = do srand (cast !time)
              let w = index !(rndFin _) words
              NewWord w
@@ -266,7 +265,7 @@ inference, but very useful in practice.
 
 \begin{code}[float=h,frame=single,caption={Mystery Word Game Implementation},label=mword]
 game : { [MYSTERY (Running (S g) w), STDIO] ==>
-         [MYSTERY NotRunning, STDIO] } Eff IO ()
+         [MYSTERY NotRunning, STDIO] } Eff ()
 game {w=Z} = Won
 game {w=S _}
      = do putStrLn !StrState
@@ -279,7 +278,7 @@ game {w=S _}
   where
     processGuess : Char -> { [MYSTERY (Running (S g) (S w)), STDIO] ==>
                              [MYSTERY NotRunning, STDIO] }
-                           Eff IO ()
+                           Eff ()
     processGuess {g} {w} c
       = case !(Main.Guess c) of
              True => do putStrLn "Good guess!"

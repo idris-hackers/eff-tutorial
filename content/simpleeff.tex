@@ -6,25 +6,31 @@ So far we have seen how to write programs with locally mutable state using the
 \texttt{STATE} effect. To recap, we have the definitions in
 Listing \ref{eff:state} in a module \texttt{Effect.State}.
 
-\begin{code}[float=h,frame=single,caption={State Effect},label=eff:state]
+\begin{code}[float=h,frame=single,caption={State Effect}, label=eff:state]
 module Effect.State
 
 STATE : Type -> EFFECT
 
-get    :             { [STATE x] } Eff m x
-put    : x ->        { [STATE x] } Eff m () 
-putM   : y ->        { [STATE x] ==> [STATE y] } Eff m () 
-update : (x -> x) -> { [STATE x] } Eff m () 
+get    :             { [STATE x] } Eff x
+put    : x ->        { [STATE x] } Eff () 
+putM   : y ->        { [STATE x] ==> [STATE y] } Eff () 
+update : (x -> x) -> { [STATE x] } Eff () 
 
 instance Handler State m
 \end{code}
 
 \noindent
 The last line, \texttt{instance Handler State m}, means that the \texttt{STATE}
-effect is usable in any computation context \texttt{m}. (The lower case
-\texttt{State} is a data type describing the operations which make up the
-\texttt{STATE} effect itself---we will go into more
-detail about this in Section \ref{sect:impleff}.) 
+effect is usable in any computation context \texttt{m}. That is, a program
+which uses this effect and returns something of type \texttt{a} can be
+evaluated to something og type \texttt{m a} using \texttt{run}, for
+any \texttt{m}.
+%That is, if we have a program \texttt{p : { [STATE t] } Eff a}, we can
+%evaluate \texttt{run p : m a} for any \texttt{m : Type -> Type}.
+%
+The lower case \texttt{State} is a data type describing the operations which
+make up the \texttt{STATE} effect itself---we will go into more detail about
+this in Section \ref{sect:impleff}.
 
 In this section, we will introduce some other supported effects, allowing
 console I/O, exceptions, random number generation and non-deterministic
@@ -45,12 +51,12 @@ module Effect.StdIO
 
 STDIO : EFFECT
 
-putChar  : Handler StdIO m => Char ->   { [STDIO] } Eff m ()
-putStr   : Handler StdIO m => String -> { [STDIO] } Eff m ()
-putStrLn : Handler StdIO m => String -> { [STDIO] } Eff m ()
+putChar  : Char ->   { [STDIO] } Eff ()
+putStr   : String -> { [STDIO] } Eff ()
+putStrLn : String -> { [STDIO] } Eff ()
 
-getStr   : Handler StdIO m =>           { [STDIO] } Eff m String
-getChar  : Handler StdIO m =>           { [STDIO] } Eff m Char
+getStr   :           { [STDIO] } Eff String
+getChar  :           { [STDIO] } Eff Char
 
 instance Handler StdIO IO
 instance Handler StdIO (IOExcept a)
@@ -70,7 +76,7 @@ A program which reads the user's name, then says hello, can be written
 as follows:
 
 \begin{code}
-hello : { [STDIO] } Eff IO ()
+hello : { [STDIO] } Eff ()
 hello = do putStr "Name? "
            x <- getStr
            putStrLn ("Hello " ++ trim x ++ "!")
@@ -91,7 +97,7 @@ In \texttt{hello} we could also use \texttt{!}-notation instead of \texttt{x <-
 getStr}, since we only use the string that is read once:
 
 \begin{code}
-hello : { [STDIO] } Eff IO ()
+hello : { [STDIO] } Eff ()
 hello = do putStr "Name? "
            putStrLn ("Hello " ++ trim !getStr ++ "!")
 \end{code}
@@ -101,7 +107,7 @@ More interestingly, we can combine multiple effects in one program. For example,
 we can loop, counting the number of people we've said hello to:
 
 \begin{code}
-hello : { [STATE Int, STDIO] } Eff IO ()
+hello : { [STATE Int, STDIO] } Eff ()
 hello = do putStr "Name? "
            putStrLn ("Hello " ++ trim !getStr ++ "!")
            update (+1)
@@ -140,7 +146,7 @@ module Effect.Exception
 
 EXCEPTION : Type -> EFFECT
 
-raise : a -> { [EXCEPTION a ] } Eff m b 
+raise : a -> { [EXCEPTION a ] } Eff b 
 
 instance           Handler (Exception a) Maybe
 instance           Handler (Exception a) List
@@ -160,7 +166,7 @@ paramaterised by an error type:
 \begin{code}
 data Err = NotANumber | OutOfRange
 
-parseNumber : Int -> String -> { [EXCEPTION Err] } Eff m Int
+parseNumber : Int -> String -> { [EXCEPTION Err] } Eff Int
 parseNumber num str
    = if all isDigit (unpack str)
         then let x = cast str in
@@ -220,7 +226,7 @@ an \texttt{if/then/else} construct, passing the proof it returns on success
 as the boundedness proof:
 
 \begin{code}
-parseNumber : (x : Int) -> String -> { [EXCEPTION Err] } Eff m (Bounded x)
+parseNumber : (x : Int) -> String -> { [EXCEPTION Err] } Eff (Bounded x)
 parseNumber x str
    = if all isDigit (unpack str)
         then let num = cast str in
@@ -230,53 +236,7 @@ parseNumber x str
         else raise NotANumber
 \end{code}
 
-\noindent
-If we are going to use this in a larger program, it is likely that we will also
-want to recover from parse failures. The \effects{} library provides the
-\texttt{catch} function for this, taking a program with available effects
-\texttt{xs}, and a function for dealing with any exceptions:
-
-\begin{code}
-catch : Catchable m err => 
-        { xs } Eff m a -> (err -> { xs } Eff m a) -> { xs } Eff m a
-\end{code}
-
-\noindent
-Notice the constraint \texttt{Catchable m err}. It is not required that
-the set of available effects includes \texttt{EXCEPTION}, merely that the
-context supports throwing and catching off errors \emph{independently} of
-whether a program uses \effects{}. It is defined as follows:
-
-\begin{code}
-class Catchable (m : Type -> Type) t where
-    throw : t -> m a
-    catch : m a -> (t -> m a) -> m a
-
-instance Catchable Maybe () 
-instance Catchable (Either a) a 
-instance Catchable (IOExcept err) err 
-instance Catchable List () 
-\end{code}
-
-\noindent
-Using \texttt{catch}, we can write a program which takes user input, parses
-it to check it is a number within a defined range, and uses a default value
-if there is a parse error.
-%
-Notice that after reading user input, the resulting proof \texttt{prf} is
-available as a guarantee that the number which has been read from user input
-is in the range \texttt{0--100}.
-
-\begin{code}
-readNum : { [STDIO, EXCEPTION Err] } Eff (IOExcept Err) ()
-readNum = do
-    putStr $ "Enter a number between 0 and 100:"
-    (num ** prf) <- catch (parseNumber 100 (trim !getStr))
-                          (\e => do putStrLn $ "FAIL: " ++ show e
-                                    return (0 ** oh))
-    putStrLn $ show num
-\end{code}
-
+%\input{catch.tex}
 
 \subsection{Random Numbers}
 
@@ -289,9 +249,9 @@ module Effect.Random
 
 RND : EFFECT
 
-srand  : Integer ->            { [RND] } Eff m ()
-rndInt : Integer -> Integer -> { [RND] } Eff m Integer
-rndFin : (k : Nat) ->          { [RND] } Eff m (Fin (S k))
+srand  : Integer ->            { [RND] } Eff ()
+rndInt : Integer -> Integer -> { [RND] } Eff Integer
+rndFin : (k : Nat) ->          { [RND] } Eff (Fin (S k))
 
 instance Handler Random m
 \end{code}
@@ -317,7 +277,7 @@ user for a guess, and state whether the guess is too high, too low, or
 correct:
 
 \begin{code}
-guess : Int -> { [STDIO] } Eff IO ()
+guess : Int -> { [STDIO] } Eff ()
 \end{code}
 
 \noindent
@@ -331,7 +291,7 @@ To invoke these, we pick a random number within the range 0--100, having
 set up the random number generator with a seed, then run \texttt{guess}:
 
 \begin{code}
-game : { [RND, STDIO] } Eff IO ()
+game : { [RND, STDIO] } Eff ()
 game = do srand 123456789
           guess (fromInteger !(rndInt 0 100))
 
@@ -346,7 +306,7 @@ example taking an initial seed from the system time. To see how to do
 this, see the \texttt{SYSTEM} effect described in Appendix \ref{sect:appendix}.
 
 \begin{code}[frame=single,float,label=eff:game,caption={Guessing Game}]
-guess : Int -> { [STDIO] } Eff IO ()
+guess : Int -> { [STDIO] } Eff ()
 guess target
     = do putStr "Guess: "
          case run (parseNumber 100 (trim !getStr)) of
@@ -372,7 +332,7 @@ import Effect.Select
 
 SELECT : EFFECT
 
-select : List a -> { [SELECT] } Eff m a 
+select : List a -> { [SELECT] } Eff a 
 
 instance Handler Selection Maybe
 instance Handler Selection List
@@ -386,7 +346,7 @@ set of candidate values, then throw an exception for any combination of values
 which does not satisfy the constraint:
 
 \begin{code}
-triple : Int -> { [SELECT, EXCEPTION String] } Eff m (Int, Int, Int)
+triple : Int -> { [SELECT, EXCEPTION String] } Eff (Int, Int, Int)
 triple max = do z <- select [1..max]
                 y <- select [1..z]
                 x <- select [1..y]
@@ -437,7 +397,7 @@ if they are equal:
 
 \begin{code}
 vadd_check : Vect n Int -> Vect m Int ->
-             { [EXCEPTION String] } Eff e (Vect m Int)
+             { [EXCEPTION String] } Eff (Vect m Int)
 vadd_check {n} {m} xs ys with (decEq n m)
   vadd_check {n} {m=n} xs ys | (Yes refl) = pure (vadd xs ys)
   vadd_check {n} {m}   xs ys | (No contra) = raise "Length mismatch"
@@ -448,7 +408,7 @@ To read a vector from the console, we implement a function of the following
 type:
 
 \begin{code}
-read_vec : { [STDIO] } Eff IO (p ** Vect p Int)
+read_vec : { [STDIO] } Eff (p ** Vect p Int)
 \end{code}
 
 \noindent
@@ -463,7 +423,7 @@ of pairwise addition of them, throwing an exception if the inputs are of
 differing lengths:
 
 \begin{code}
-do_vadd : { [STDIO, EXCEPTION String] } Eff IO ()
+do_vadd : { [STDIO, EXCEPTION String] } Eff ()
 do_vadd = do putStrLn "Vector 1"
              (_ ** xs) <- read_vec
              putStrLn "Vector 2"
@@ -478,7 +438,7 @@ does not stop us reading vectors from user input, but it does require that
 the lengths are checked and any discrepancy is dealt with gracefully.
 
 \begin{code}[float=h,frame=single,caption={Reading a vector from the console},label=readvec]
-read_vec : { [STDIO] } Eff IO (p ** Vect p Int)
+read_vec : { [STDIO] } Eff (p ** Vect p Int)
 read_vec = do putStr "Number (-1 when done): "
               case run (parseNumber (trim !getStr)) of
                    Nothing => do putStrLn "Input error"
@@ -488,7 +448,7 @@ read_vec = do putStr "Number (-1 when done): "
                                         pure (_ ** v :: xs)
                                 else pure (_ ** [])
   where
-    parseNumber : String -> { [EXCEPTION String] } Eff m Int
+    parseNumber : String -> { [EXCEPTION String] } Eff Int
     parseNumber str
       = if all (\x => isDigit x || x == '-') (unpack str)
            then pure (cast str)
@@ -535,7 +495,7 @@ a mapping from variable names (as \texttt{String}s) to their values:
 Env : Type
 Env = List (String, Integer)
 
-eval : Expr -> { [EXCEPTION String, STATE Env] } Eff m Integer
+eval : Expr -> { [EXCEPTION String, STATE Env] } Eff Integer
 eval (Val x) = return x
 eval (Add l r) = return $ !(eval l) + !(eval r)
 \end{code}
@@ -563,7 +523,7 @@ invokes \texttt{eval}:
 \begin{code}
 runEval : List (String, Integer) -> Expr -> Maybe Integer
 runEval args expr = run (eval' expr)
-  where eval' : Expr -> { [EXCEPTION String, STATE Env] } Eff Maybe Integer
+  where eval' : Expr -> { [EXCEPTION String, STATE Env] } Eff Integer
         eval' e = do put args
                      eval e
 \end{code}
@@ -591,7 +551,7 @@ list of events to include \texttt{RND}. It doen't matter where \texttt{RND}
 appears in the list, as long as it is present:
 
 \begin{code}
-eval : Expr -> { [EXCEPTION String, RND, STATE Env] } Eff m Integer
+eval : Expr -> { [EXCEPTION String, RND, STATE Env] } Eff Integer
 
 eval (Random upper) = rndInt 0 upper
 \end{code}
@@ -619,15 +579,16 @@ Can't solve goal
 
 \noindent
 In other words, the \texttt{STDIO} effect is not available. We can correct
-this simply by updating the type of \texttt{eval} to include \texttt{STDIO},
-and setting the context \texttt{m} to be one which is handled by \texttt{STDIO}
-such as \texttt{IO}:
+this simply by updating the type of \texttt{eval} to include \texttt{STDIO}.
 
 \begin{code}
-eval : Expr -> { [STDIO, EXCEPTION String, RND, STATE Env] } Eff IO Integer
+eval : Expr -> { [STDIO, EXCEPTION String, RND, STATE Env] } Eff Integer
 \end{code}
 
 \noindent
+Note that using \texttt{STDIO} will restrict the number of contexts 
+in which \texttt{eval} can be \texttt{run} to those which support \texttt{STDIO},
+such as \texttt{IO}.
 Once effect lists get longer, it can be a good idea instead
 to encapsulate sets of effects in a type synonym. This is achieved as follows,
 simply by defining a function which computes a type, since types are first
@@ -635,7 +596,7 @@ class in \Idris{}:
 
 \begin{code}
 EvalEff : Type -> Type
-EvalEff t = { [STDIO, EXCEPTION String, RND, STATE Env] } Eff IO t
+EvalEff t = { [STDIO, EXCEPTION String, RND, STATE Env] } Eff t
   
 eval : Expr -> EvalEff Integer
 \end{code}

@@ -120,13 +120,10 @@ zero or more times.
 
 A \texttt{Handler} for \texttt{State} simply passes on the value of the state,
 in the case of \texttt{Get}, or passes on a new state, in the case of \texttt{Put}.
-It is defined the same way for all computation contexts\footnote{Recall that
-\texttt{using} notation simply gives a type for any implicit arguments in
-the \texttt{using} block}:
+It is defined the same way for all computation contexts:
 
 \begin{code}
-using (m : Type -> Type)
-  instance Handler State m where
+instance Handler State m where
      handle st Get     k = k st st
      handle st (Put n) k = k () n
 \end{code}
@@ -137,29 +134,27 @@ directly in \texttt{Eff} programs. It is tidy, however, to define top level
 functions in \texttt{Eff}, as follows:
 
 \begin{code}
-get : { [STATE x] } Eff m x
-get = Get
+get : { [STATE x] } Eff x
+get = call Get
 
-put : x -> { [STATE x] } Eff m () 
-put val = Put val
+put : x -> { [STATE x] } Eff () 
+put val = call (Put val)
 
-putM : y -> { [STATE x] ==> [STATE y] } Eff m () 
-putM val = Put val
+putM : y -> { [STATE x] ==> [STATE y] } Eff () 
+putM val = call (Put val)
 \end{code}
 
 \noindent
-\textbf{An implementation detail (aside):} In fact, we are not really using
-the \texttt{Get} and \texttt{Put} operations directly. Rather, we are using
-an \texttt{implicit} function which converts an \texttt{Effect} to a 
-function in \texttt{Eff}, given an automatically constructed proof that the
-effect is available:
+\textbf{An implementation detail (aside):} 
+The \texttt{call} function converts an \texttt{Effect} to a function in
+\texttt{Eff}, given a proof that the effect is
+available. This proof can be constructed automatically by \Idris{}, since it
+is essentially an index into a statically known list of effects:
 
 \begin{code}
-implicit
-effect' : {a, b: _} -> {e : Effect} ->
-          (eff : e t a b) ->
-          {prf : EffElem e a xs} ->
-          Eff m t xs (\v => updateResTy v xs prf eff)
+call : {e : Effect} ->
+       (eff : e t a b) -> {auto prf : EffElem e a xs} ->
+       Eff t xs (\v => updateResTy v xs prf eff)
 \end{code}
 
 \noindent
@@ -175,7 +170,7 @@ effects, however.
 Listing \ref{eff:statedef} summarises what is required to define the
 \texttt{STATE} effect.
 
-\begin{code}[float=h,frame=single, caption={Complete State Effect Definition}, label=eff:statedef]
+\begin{code}[float=t,frame=single, caption={Complete State Effect Definition}, label=eff:statedef]
 data State : Effect where
      Get :      { a }       State a
      Put : b -> { a ==> b } State () 
@@ -183,19 +178,18 @@ data State : Effect where
 STATE : Type -> EFFECT
 STATE t = MkEff t State
 
-using (m : Type -> Type)
-  instance Handler State m where
+instance Handler State m where
      handle st Get     k = k st st
      handle st (Put n) k = k () n
 
-get : { [STATE x] } Eff m x
-get = Get
+get : { [STATE x] } Eff x
+get = call Get
 
-put : x -> { [STATE x] } Eff m () 
-put val = Put val
+put : x -> { [STATE x] } Eff () 
+put val = call (Put val)
 
-putM : y -> { [STATE x] ==> [STATE y] } Eff m () 
-putM val = Put val
+putM : y -> { [STATE x] ==> [STATE y] } Eff () 
+putM val = call (Put val)
 \end{code}
 
 \subsection{Console I/O}
@@ -235,14 +229,6 @@ STDIO = MkEff () StdIO
 
 \subsection{Exceptions}
 
-Listing \ref{eff:exceptdef} gives the definition of the \texttt{Exception}
-effect, including two of its handlers for \texttt{Maybe} and \texttt{List}.
-The only operation provided is \texttt{Raise}. 
-
-The key point to note in the definitions of these handlers is that the
-continuation \texttt{k} is not used. Running \texttt{Raise} therefore means
-that computation stops with an error.
-
 \begin{code}[float=h,frame=single, caption={Exception Effect Definition}, label=eff:exceptdef]
 data Exception : Type -> Effect where 
      Raise : a -> { () } Exception a b
@@ -257,17 +243,15 @@ EXCEPTION : Type -> EFFECT
 EXCEPTION t = MkEff () (Exception t)
 \end{code}
 
+Listing \ref{eff:exceptdef} gives the definition of the \texttt{Exception}
+effect, including two of its handlers for \texttt{Maybe} and \texttt{List}.
+The only operation provided is \texttt{Raise}. 
+
+The key point to note in the definitions of these handlers is that the
+continuation \texttt{k} is not used. Running \texttt{Raise} therefore means
+that computation stops with an error.
+
 \subsection{Non-determinism}
-
-Listing \ref{eff:selectdef} gives the definition of the \texttt{Select} effect
-for writing non-deterministic programs, including a handler for \texttt{List}
-context which returns all possible successful values, and a handler for
-\texttt{Maybe} context which returns the first successful value.
-
-Here, the continuation is called multiple times in each handler, for each
-value in the list of possible values. In the \texttt{List} handler, we
-accumulate all successful results, and in the \texttt{Maybe} handler we
-try the first value in the last, and try later values only if that fails.
 
 \begin{code}[float=h,frame=single, caption={Non-determinism Effect Definition}, label=eff:selectdef]
 data Selection : Effect where
@@ -286,6 +270,16 @@ instance Handler Selection List where
 SELECT : EFFECT
 SELECT = MkEff () Selection
 \end{code}
+
+Listing \ref{eff:selectdef} gives the definition of the \texttt{Select} effect
+for writing non-deterministic programs, including a handler for \texttt{List}
+context which returns all possible successful values, and a handler for
+\texttt{Maybe} context which returns the first successful value.
+
+Here, the continuation is called multiple times in each handler, for each
+value in the list of possible values. In the \texttt{List} handler, we
+accumulate all successful results, and in the \texttt{Maybe} handler we
+try the first value in the last, and try later values only if that fails.
 
 \subsection{File Management}
 
