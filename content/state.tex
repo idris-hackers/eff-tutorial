@@ -49,7 +49,7 @@ treeTagAux i (Node l x r)
          let x' = (i', x) in
          let (i'', r') = treeTagAux (i' + 1) r in
              (i'', Node l' x' r')
-  
+
 treeTag : (i : Int) -> BTree a -> BTree (Int, a)
 treeTag i x = snd (treeTagAux i x)
 \end{code}
@@ -58,7 +58,7 @@ treeTag i x = snd (treeTagAux i x)
 This gives the expected result when run at the \Idris{} REPL prompt:
 
 \begin{code}
-*TreeTag> treeTag 1 testTree 
+*TreeTag> treeTag 1 testTree
 Node (Node Leaf (1, "Jim") Leaf)
      (2, "Fred")
      (Node (Node Leaf (3, "Alice") Leaf)
@@ -92,7 +92,7 @@ f : (x1 : a1) -> (x2 : a2) -> ... -> { effs } Eff t
 \noindent
 That is, the return type gives the effects that \texttt{f} supports
 (\texttt{effs}, of type \texttt{List EFFECT}) and the
-type the computation returns \texttt{t}. 
+type the computation returns \texttt{t}.
 So, our
 \texttt{treeTagAux} helper could be written with the following type:
 
@@ -142,17 +142,17 @@ a variable \texttt{x}. For example, in the above code, \texttt{treeTagAux l}
 is an effectful operation returning a pair \texttt{(Int, BTree a)}, so
 \texttt{l'} has type \texttt{(Int, BTree a)}.
 \item \texttt{pure e} turns a pure value \texttt{e} into the result of
-an effectful operation. 
+an effectful operation.
 \end{itemize}
 
 \noindent
-The \texttt{get} and \texttt{put} functions read and write a state \texttt{t}, 
+The \texttt{get} and \texttt{put} functions read and write a state \texttt{t},
 assuming that the \texttt{STATE t} effect is available. They have the following
 types, polymorphic in the state \texttt{t} they manage:
 
 \begin{code}
 get :      { [STATE t] } Eff t
-put : t -> { [STATE t] } Eff () 
+put : t -> { [STATE t] } Eff ()
 \end{code}
 
 \noindent
@@ -163,7 +163,7 @@ function. In this case, it is valid for \texttt{treeTagAux} to call both
 \texttt{STATE Int} effect.
 
 Programs in \texttt{Eff} are run in some underlying \emph{computation context},
-using the \texttt{run} or \texttt{runPure} function. Using 
+using the \texttt{run} or \texttt{runPure} function. Using
 \texttt{runPure}, which runs an effectful program in the identity context,
 we can write the \texttt{treeTag} function as follows, using \texttt{put}
 to initialise the state:
@@ -189,7 +189,7 @@ treeTag i x = run (do put i
 \end{code}
 
 \noindent
-Note that the definition of \texttt{treeTagAux} is exactly as before. 
+Note that the definition of \texttt{treeTagAux} is exactly as before.
 For reference, this
 complete program (including a \texttt{main} to run it) is shown in
 Listing \ref{introprog}.
@@ -226,8 +226,8 @@ treeTagAux (Node l x r) = do l' <- treeTagAux l
 treeTag : (i : Int) -> BTree a -> BTree (Int, a)
 treeTag i x = runPure (do put i; treeTagAux x)
 
-main : IO () 
-main = print (treeTag 1 testTree) 
+main : IO ()
+main = print (treeTag 1 testTree)
 \end{code}
 
 
@@ -289,7 +289,8 @@ One possibility would be to change the state so that it captured both of
 these values, e.g.:
 
 \begin{code}
-treeTagAux : BTree a -> { [STATE (Int, Int)] } Eff (BTree (Int, a))
+treeTagAux : BTree a
+           -> { [STATE (Int, Int)] } Eff (BTree (Int, a))
 \end{code}
 
 \noindent
@@ -304,8 +305,9 @@ name. This allows multiple effects of the same type to be included. We can
 count leaves and update the tag separately, by labelling them as follows:
 
 \begin{code}
-treeTagAux : BTree a -> { ['Tag ::: STATE Int,
-                           'Leaves ::: STATE Int] } Eff (BTree (Int, a))
+treeTagAux : BTree a
+           -> {['Tag ::: STATE Int,
+                'Leaves ::: STATE Int]} Eff (BTree (Int, a))
 \end{code}
 
 \noindent
@@ -313,7 +315,7 @@ The \texttt{:::} operator allows an arbitrary label to be given to an effect.
 This label can be any type---it is simply used to identify an effect uniquely.
 Here, we have used a symbol type. In general \texttt{'name} introduces a
 new symbol, the only purpose of which is to disambiguate values\footnote{In
-practice, \texttt{'name} simply introduces a new empty type}. 
+practice, \texttt{'name} simply introduces a new empty type}.
 
 When an effect is labelled, its operations are also labelled using the
 \texttt{:-} operator. In this way, we can say explicitly which state we mean
@@ -321,14 +323,15 @@ when using \texttt{get} and \texttt{put}. The tree tagging program which also
 counts leaves can be written as follows:
 
 \begin{code}
-treeTagAux Leaf = do 'Leaves :- update (+1)
-                     pure Leaf
-treeTagAux (Node l x r)
-  = do l' <- treeTagAux l
-       i <- 'Tag :- get
-       'Tag :- put (i + 1)
-       r' <- treeTagAux r
-       pure (Node l' (i, x) r')
+treeTagAux Leaf = do
+    'Leaves :- update (+1)
+    pure Leaf
+treeTagAux (Node l x r) = do
+    l' <- treeTagAux l
+    i <- 'Tag :- get
+    'Tag :- put (i + 1)
+    r' <- treeTagAux r
+    pure (Node l' (i, x) r')
 \end{code}
 
 \noindent
@@ -336,7 +339,7 @@ The \texttt{update} function here is a combination of \texttt{get} and \texttt{p
 applying a function to the current state.
 
 \begin{code}
-update : (x -> x) -> { [STATE x] } Eff () 
+update : (x -> x) -> { [STATE x] } Eff ()
 \end{code}
 
 \noindent
@@ -374,7 +377,7 @@ the situation where available effects are not updated):
 
 \noindent
 Here, \texttt{LRes} is simply the resource type associated with a labelled
-effect. Note that labels are polymorphic in the label type \texttt{lbl}. 
+effect. Note that labels are polymorphic in the label type \texttt{lbl}.
 Hence, a label can be anything---a string, an integer, a type, etc.
 
 \subsection{\texttt{!}-notation}
@@ -421,7 +424,7 @@ effectful.
 For example, the expression\ldots
 
 \begin{code}
-let y = 42 in f !(g !(print y) !x) 
+let y = 42 in f !(g !(print y) !x)
 \end{code}
 
 \ldots is lifted to:
@@ -474,7 +477,7 @@ Therefore, the \effects{} library provides syntactic sugar which is translated
 such that\ldots
 
 \begin{code}
-{ xs } Eff a 
+{ xs } Eff a
 \end{code}
 
 \ldots is expanded to \ldots
@@ -490,7 +493,7 @@ programs. We could also have written \texttt{treeTagAux} with the expanded
 type:
 
 \begin{code}
-treeTagAux : BTree a -> 
+treeTagAux : BTree a ->
              Eff (BTree (Int, a)) [STATE Int] (\x => [STATE Int])
 \end{code}
 
@@ -513,7 +516,7 @@ in a state machine). There is, for example, a version of \texttt{put} which
 updates the type of the state:
 
 \begin{code}
-putM : y -> { [STATE x] ==> [STATE y] } Eff () 
+putM : y -> { [STATE x] ==> [STATE y] } Eff ()
 \end{code}
 
 \noindent
@@ -532,7 +535,3 @@ Eff a xs (\res => xs')
 \noindent
 i.e. the set of effects is updated according to the result of the operation
 \texttt{res}.
-
-
-
-
