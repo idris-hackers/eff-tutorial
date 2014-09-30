@@ -206,18 +206,18 @@ the integer itself. One way to do this is define a type of bounded integers,
 
 \begin{code}
 Bounded : Int -> Type
-Bounded x = (n : Int ** so (n >= 0 && n <= x))
+Bounded x = (n : Int ** So (n >= 0 && n <= x))
 \end{code}
 
 \noindent
-Recall that \texttt{so} is parameterised by a \texttt{Bool}, and only
-\texttt{so True} is inhabited. We can use \texttt{choose} to construct such
+Recall that \texttt{So} is parameterised by a \texttt{Bool}, and only
+\texttt{So True} is inhabited. We can use \texttt{choose} to construct such
 a value from the result of a dynamic check:
 
 \begin{code}
-data so : Bool -> Type = oh : so True
+data So : Bool -> Type = Oh : So True
 
-choose : (b : Bool) -> Either (so b) (so (not b))
+choose : (b : Bool) -> Either (So b) (So (not b))
 \end{code}
 
 \noindent
@@ -399,7 +399,7 @@ if they are equal:
 vadd_check : Vect n Int -> Vect m Int ->
              { [EXCEPTION String] } Eff (Vect m Int)
 vadd_check {n} {m} xs ys with (decEq n m)
-  vadd_check {n} {m=n} xs ys | (Yes refl) = pure (vadd xs ys)
+  vadd_check {n} {m=n} xs ys | (Yes Refl) = pure (vadd xs ys)
   vadd_check {n} {m}   xs ys | (No contra) = raise "Length mismatch"
 \end{code}
 
