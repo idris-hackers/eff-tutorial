@@ -24,6 +24,8 @@
 *.out
 *.pdfsync
 *.ps
+*.pdf
+*.fls
 *.snm
 *.synctex.gz
 *.toc
