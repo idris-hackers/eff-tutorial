@@ -1,19 +1,26 @@
 TUTORIAL = eff-tutorial
 DATE     = ${shell date +%F}
-TUT_PDF  = ${DATE}-${TUTORIAL}.pdf
+TUT_PDF  = ${DATE}-${TUTORIAL}
 
 all: tutorial clean
 
-tutorial:
-	latexmk -gg -pdf -bibtex-cond ${TUTORIAL}.tex
+tutorial: tutorial-print tutorial-screen
+
+
+tutorial-print:
+	latexmk -gg -pdf -bibtex-cond ${TUTORIAL}.print.tex
+
+tutorial-screen:
+	latexmk -gg -pdf -bibtex-cond ${TUTORIAL}.screen.tex
+
 
 version: tutorial
-	mv ${TUTORIAL}.pdf ${TUT_PDF}
+	mv ${TUTORIAL}.print.pdf ${TUT_PDF}.print.pdf
+	mv ${TUTORIAL}.screen.pdf ${TUT_PDF}.screen.pdf
 
 clean:
 	latexmk -c
 
 cthulhu:
 	latexmk -C
-	rm -rf ${TUT_PDF}
-
+	rm -rf ${TUT_PDF}.print.pdf ${TUT_PDF}.scren.pdf
