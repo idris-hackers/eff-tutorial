@@ -22,6 +22,7 @@
 \RequirePackage{ifthen}
 \RequirePackage{listings}
 \RequirePackage{xspace}
+\RequirePackage{setspace}
 %% ----------------------------------------------------------------- [ Options ]
 \newboolean{literate}
 \setboolean{literate}{false}
@@ -151,7 +152,7 @@
             {>=}{{$\geq$}}2
             {<-}{{$\leftarrow$}}2
             {<=}{{$\leq$}}2
-            {=>}{{$\Rightarrow$}}2 
+            {=>}{{$\Rightarrow$}}2
             {==}{{$\equiv$}}2
             {\ .}{{$\circ$}}2
             {\ .\ }{{$\circ$}}2
@@ -184,6 +185,7 @@
       \ifthenelse{\boolean{numbers}}{%
         \lstset{style=numbers, #1}}{%
         \lstset{style=default, #1}}
+      \singlespacing
     }
     {}
 \endinput
