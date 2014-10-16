@@ -176,7 +176,7 @@ treeTag i x = runPure (do put i
 
 \noindent
 We could also run the program in an impure context such as \texttt{IO},
-without changing the definition of \texttt{treetTagAux},
+without changing the definition of \texttt{treeTagAux},
 by using \texttt{run} instead of \texttt{runPure}:
 
 \begin{code}
