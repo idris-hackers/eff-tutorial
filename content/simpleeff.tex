@@ -23,7 +23,7 @@ instance Handler State m
 The last line, \texttt{instance Handler State m}, means that the \texttt{STATE}
 effect is usable in any computation context \texttt{m}. That is, a program
 which uses this effect and returns something of type \texttt{a} can be
-evaluated to something og type \texttt{m a} using \texttt{run}, for
+evaluated to something of type \texttt{m a} using \texttt{run}, for
 any \texttt{m}.
 %That is, if we have a program \texttt{p : { [STATE t] } Eff a}, we can
 %evaluate \texttt{run p : m a} for any \texttt{m : Type -> Type}.
