@@ -96,9 +96,9 @@ readInt : { [STATE (Vect n Int), STDIO] ==>
                        else [STATE (Vect n Int), STDIO] } Eff Bool
 readInt = do let x = trim !getStr
              case all isDigit (unpack x) of
-                  False => with_val False (pure ())
+                  False => pure False 
                   True => do putM (cast x :: !get)
-                             with_val True (pure ())
+                             pure True 
 \end{code}
 
 \noindent
@@ -107,44 +107,8 @@ effects available are updated from \texttt{xs} to \texttt{xs'}, \emph{and}
 the resulting effects \texttt{xs'} may depend on the result of the operation
 \texttt{res}, of type \texttt{a}. Here, the resulting effects are computed
 from the result \texttt{ok}---if \texttt{True}, the vector is extended, otherwise
-it remains the same. We also use \texttt{with\_val} to return a result:
+it remains the same. 
 
-\begin{code}
-with_val : (val : a) -> 
-           ({ xs ==> xs' val } Eff ()) -> { xs ==> xs' } Eff a
-\end{code}
-
-\noindent
-We cannot use \texttt{pure} here, as before, since \texttt{pure} does not allow
-the returned value to update the effects list. The purpose of \texttt{with\_val}
-is to update the effects before returning. As a shorthand, we can write
-
-\begin{code}
-pureM val
-\end{code}
-
-\ldots instead of\ldots
-
-\begin{code}
-with_val val (pure ())
-\end{code}
-
-\noindent
-\ldots so our program is:
-
-\begin{code}
-readInt : { [STATE (Vect n Int), STDIO] ==>
-            {ok} if ok then [STATE (Vect (S n) Int), STDIO]
-                       else [STATE (Vect n Int), STDIO] }
-          Eff Bool
-readInt = do let x = trim !getStr
-             case all isDigit (unpack x) of
-                  False => pureM False
-                  True => do putM (cast x :: !get)
-                             pureM True
-\end{code}
-
-\noindent
 When using the function, we will naturally have to check its return value
 in order to know what the new set of effects is. For example, to read a set
 number of values into a vector, we could write the following:
