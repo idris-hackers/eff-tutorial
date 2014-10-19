@@ -309,7 +309,7 @@ this, see the \texttt{SYSTEM} effect described in Appendix \ref{sect:appendix}.
 guess : Int -> { [STDIO] } Eff ()
 guess target
     = do putStr "Guess: "
-         case run (parseNumber 100 (trim !getStr)) of
+         case run {m=Maybe} (parseNumber 100 (trim !getStr)) of
               Nothing => do putStrLn "Invalid input"
                             guess target
               Just (v ** _) =>
