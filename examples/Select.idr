@@ -3,7 +3,7 @@ module Main
 import Effect.Select
 import Effect.Exception
 
-triple : Int -> { [SELECT, EXCEPTION String] } Eff m (Int, Int, Int)
+triple : Int -> { [SELECT, EXCEPTION String] } Eff (Int, Int, Int)
 triple max = do z <- select [1..max]
                 y <- select [1..z]
                 x <- select [1..y]

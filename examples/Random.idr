@@ -6,7 +6,7 @@ import Effect.StdIO
 
 data Err = NotANumber | OutOfRange
 
-parseNumber : Int -> String -> { [EXCEPTION Err] } Eff m Int
+parseNumber : Int -> String -> { [EXCEPTION Err] } Eff Int
 parseNumber num str 
    = if all isDigit (unpack str) 
         then let x = cast str in
@@ -15,10 +15,10 @@ parseNumber num str
                 else raise OutOfRange
         else raise NotANumber
 
-guess : Int -> { [STDIO] } Eff IO ()
+guess : Int -> { [STDIO] } Eff ()
 guess target 
     = do putStr "Guess: "
-         case run (parseNumber 100 (trim !getStr)) of
+         case run {m=Maybe} (parseNumber 100 (trim !getStr)) of
               Nothing => do putStrLn "Invalid input"
                             guess target
               Just v => case compare v target of
@@ -28,7 +28,7 @@ guess target
                              GT => do putStrLn "Too high"
                                       guess target
 
-game : { [RND, STDIO] } Eff IO ()
+game : { [RND, STDIO] } Eff ()
 game = do srand 123456789
           guess (fromInteger !(rndInt 0 100))
 

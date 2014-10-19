@@ -18,7 +18,7 @@ testTree = Node (Node Leaf "Jim" Leaf)
                       "Sheila" 
                       (Node Leaf "Bob" Leaf))
 
-treeTagAux : BTree a -> { [STATE Int] } Eff m (BTree (Int, a))
+treeTagAux : BTree a -> { [STATE Int] } Eff (BTree (Int, a))
 treeTagAux Leaf = return Leaf
 treeTagAux (Node l x r) 
     = do l' <- treeTagAux l

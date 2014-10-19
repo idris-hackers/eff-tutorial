@@ -3,7 +3,7 @@ module Main
 import Effect.StdIO
 import Effect.State
 
-hello : { [STATE Int, STDIO] } Eff IO ()
+hello : { [STATE Int, STDIO] } Eff ()
 hello = do putStr "Name? "
            putStrLn ("Hello " ++ trim !getStr ++ "!")
            update (+1)
