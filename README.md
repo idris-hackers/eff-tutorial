@@ -1,15 +1,8 @@
-# A Tutorial for Effects in Idris.
+# An OLD Tutorial for Effects in Idris.
 
-The `Effects` package in `Idris` provide a novel means to deal with side-effects using algebraic effect handlers.
-This tutorial provides information on how to work with `Effects` in `Idris` including:
+This tutorial has become deprecated in favour of a Sphinx based, readthedocs integrated, solution hosted on the main idris repository. You can find this repository online:
 
-+ Using the provided effects.
-+ Creating your own effects.
+    http://www.github.com/idris-lang/Idris-dev
 
+This repository is left here for archival purposes.
 
-`Idris` is a dependently typed general purpose pure functional programming language.
-More information over Idris can be found online at: [[http://www.idris-lang.org]]
-
-If you would like to contribute to the tutorial feel free to do so.
-However, please read [[CONTRIBUTING.md]] first; it contains some guidance and information on our processes.
-Issues can be found in the issue tracker.
